@@ -30,9 +30,9 @@ cp -r "$ROOT/backend/dist/"* "$ROOT/cli/backend/dist/"
 cp -r "$ROOT/backend/public/"* "$ROOT/cli/backend/public/"
 cp "$ROOT/backend/package.json" "$ROOT/cli/backend/"
 
-echo "  Installing backend dependencies..."
+echo "  Installing backend dependencies (with native addons)..."
 cd "$ROOT/cli/backend"
-npm install --omit=dev --ignore-scripts 2>/dev/null
+npm install --omit=dev 2>/dev/null
 
 # 5. Bundle frontend (Next.js standalone) into CLI
 echo "  Bundling frontend..."
@@ -64,9 +64,7 @@ rm -rf "$ROOT/cli/frontend/node_modules/@img"
 rm -rf "$ROOT/cli/backend/node_modules/es-abstract"
 # Backend: remove lodash (5MB, can be replaced)
 rm -rf "$ROOT/cli/backend/node_modules/lodash"
-# Backend: strip better-sqlite3 source/docs (keep build + lib only)
-rm -rf "$ROOT/cli/backend/node_modules/better-sqlite3/deps"
-rm -rf "$ROOT/cli/backend/node_modules/better-sqlite3/src"
+# Backend: strip better-sqlite3 docs (keep build + lib + source for rebuild)
 rm -rf "$ROOT/cli/backend/node_modules/better-sqlite3/docs"
 # Backend: remove test/example dirs
 find "$ROOT/cli/backend/node_modules" -type d -name "test" -exec rm -rf {} + 2>/dev/null || true

@@ -2,7 +2,8 @@ import { Agent, Alert, CostData, Session, SessionDetail, Project, ProjectDetail 
 import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails } from "./mock-data";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
-const USE_MOCK = !process.env.NEXT_PUBLIC_API_URL;
+// Use real API by default (mock only if NEXT_PUBLIC_USE_MOCK=true)
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

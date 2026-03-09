@@ -35,6 +35,13 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Serve embedded dashboard
+import path from "path";
+app.use(express.static(path.join(__dirname, "..", "public")));
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+});
+
 // Init
 initDb();
 initTelegram();

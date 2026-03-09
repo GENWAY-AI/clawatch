@@ -267,7 +267,7 @@ router.get("/sessions/:id", async (req: Request, res: Response) => {
 
 router.get("/sessions/:id/suggestions", async (req: Request, res: Response) => {
   try {
-    const suggestions = await suggestRelatedSessions(req.params.id);
+    const suggestions = await suggestRelatedSessions(req.params.id as string);
     res.json({ suggestions });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to get suggestions" });
@@ -293,7 +293,7 @@ router.get("/projects", (_req: Request, res: Response) => {
 
 router.get("/projects/:id", async (req: Request, res: Response) => {
   try {
-    const detail = await getProjectDetail(req.params.id);
+    const detail = await getProjectDetail(req.params.id as string);
     if (!detail) {
       res.status(404).json({ error: "Project not found" });
       return;
@@ -310,7 +310,7 @@ router.post("/projects/:id/sessions", (req: Request, res: Response) => {
     res.status(400).json({ error: "sessionId is required" });
     return;
   }
-  const ok = addSessionToProject(req.params.id, sessionId);
+  const ok = addSessionToProject(req.params.id as string, sessionId);
   if (!ok) {
     res.status(400).json({ error: "Failed to add session" });
     return;
@@ -319,7 +319,7 @@ router.post("/projects/:id/sessions", (req: Request, res: Response) => {
 });
 
 router.delete("/projects/:id/sessions/:sessionId", (req: Request, res: Response) => {
-  const ok = removeSessionFromProject(req.params.id, req.params.sessionId);
+  const ok = removeSessionFromProject(req.params.id as string, req.params.sessionId as string);
   if (!ok) {
     res.status(404).json({ error: "Session not found in project" });
     return;

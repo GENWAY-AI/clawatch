@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClaWatch — AI Agent Observability</title>
+  <style>
+    :root {
+      --bg: #0a0a0a; --surface: #141414; --border: #222; --text: #e5e5e5;
+      --muted: #888; --accent: #3b82f6; --green: #22c55e; --yellow: #eab308;
+      --red: #ef4444; --purple: #a855f7;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:var(--bg); color:var(--text); }
+    .container { max-width:1200px; margin:0 auto; padding:20px; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:16px 0; border-bottom:1px solid var(--border); margin-bottom:24px; }
+    header h1 { font-size:1.5rem; font-weight:700; }
+    header h1 span { color:var(--accent); }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:24px; }
+    .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; }
+    .stat-card .label { font-size:0.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+    .stat-card .value { font-size:1.75rem; font-weight:700; margin-top:4px; }
+    .stat-card .value.green { color:var(--green); }
+    .stat-card .value.blue { color:var(--accent); }
+    .stat-card .value.purple { color:var(--purple); }
+    .tabs { display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+    .tab { background:none; border:none; color:var(--muted); cursor:pointer; padding:8px 16px; font-size:0.9rem; border-radius:8px 8px 0 0; }
+    .tab.active { color:var(--text); background:var(--surface); border:1px solid var(--border); border-bottom-color:var(--surface); }
+    .tab:hover { color:var(--text); }
+    .agents-grid { display:grid; gap:12px; }
+    .agent-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; align-items:center; gap:16px; cursor:pointer; transition:border-color 0.2s; }
+    .agent-card:hover { border-color:var(--accent); }
+    .dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .dot.active { background:var(--green); }
+    .dot.idle { background:var(--yellow); }
+    .dot.error { background:var(--red); }
+    .agent-info { flex:1; }
+    .agent-name { font-weight:600; font-size:1rem; }
+    .agent-meta { color:var(--muted); font-size:0.8rem; margin-top:2px; }
+    .agent-stats { text-align:right; }
+    .agent-cost { font-weight:600; color:var(--green); }
+    .agent-tokens { color:var(--muted); font-size:0.8rem; }
+    .sessions-list { display:grid; gap:10px; }
+    .session-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; cursor:pointer; transition:border-color 0.2s; }
+    .session-card:hover { border-color:var(--accent); }
+    .session-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+    .session-title { font-weight:600; font-size:0.95rem; max-width:70%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .session-cost { font-weight:600; color:var(--green); }
+    .session-meta { display:flex; gap:12px; color:var(--muted); font-size:0.8rem; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:0.7rem; font-weight:600; }
+    .badge.active { background:rgba(34,197,94,0.15); color:var(--green); }
+    .badge.idle { background:rgba(234,179,8,0.15); color:var(--yellow); }
+    .badge.completed { background:rgba(136,136,136,0.15); color:var(--muted); }
+    .filter-bar { display:flex; gap:8px; margin-bottom:16px; align-items:center; }
+    .filter-btn { background:var(--surface); border:1px solid var(--border); color:var(--muted); padding:6px 12px; border-radius:8px; font-size:0.8rem; cursor:pointer; }
+    .filter-btn.active { border-color:var(--accent); color:var(--accent); }
+    .projects-list { display:grid; gap:12px; }
+    .project-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; cursor:pointer; transition:border-color 0.2s; }
+    .project-card:hover { border-color:var(--accent); }
+    .project-name { font-weight:700; font-size:1.1rem; margin-bottom:8px; }
+    .project-stats { display:flex; gap:16px; color:var(--muted); font-size:0.85rem; }
+    .detail-panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; }
+    .detail-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
+    .detail-title { font-size:1.3rem; font-weight:700; }
+    .back-btn { background:none; border:1px solid var(--border); color:var(--muted); padding:6px 14px; border-radius:8px; cursor:pointer; font-size:0.85rem; }
+    .back-btn:hover { color:var(--text); border-color:var(--text); }
+    .cost-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:20px; }
+    .cost-item { background:var(--bg); border-radius:8px; padding:12px; }
+    .cost-model { font-size:0.8rem; color:var(--muted); }
+    .cost-value { font-size:1.1rem; font-weight:600; color:var(--green); }
+    .messages { display:grid; gap:8px; max-height:600px; overflow-y:auto; }
+    .msg { padding:10px 14px; border-radius:10px; font-size:0.85rem; line-height:1.5; }
+    .msg.user { background:rgba(59,130,246,0.1); border-left:3px solid var(--accent); }
+    .msg.assistant { background:rgba(136,136,136,0.08); border-left:3px solid var(--muted); }
+    .msg.tool { background:rgba(168,85,247,0.08); border-left:3px solid var(--purple); font-family:monospace; font-size:0.8rem; }
+    .msg-header { display:flex; gap:8px; align-items:center; margin-bottom:4px; font-size:0.75rem; color:var(--muted); }
+    .msg-role { font-weight:600; text-transform:uppercase; }
+    .msg-content { white-space:pre-wrap; word-break:break-word; max-height:200px; overflow:hidden; }
+    .timeline-agent { font-weight:600; color:var(--accent); }
+    .loading { text-align:center; padding:40px; color:var(--muted); }
+    .empty { text-align:center; padding:40px; color:var(--muted); }
+    #app { min-height:80vh; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔍 Cla<span>Watch</span></h1>
+      <div style="color:var(--muted);font-size:0.85rem;" id="last-updated"></div>
+    </header>
+    <div class="stats" id="stats"></div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="agents">Agents</button>
+      <button class="tab" data-tab="sessions">Sessions</button>
+      <button class="tab" data-tab="projects">Projects</button>
+      <button class="tab" data-tab="alerts">Alerts</button>
+    </div>
+    <div id="app"><div class="loading">Loading...</div></div>
+  </div>
+
+<script>
+const API = '';
+let currentTab = 'agents';
+let statusFilter = 'active';
+
+// --- Helpers ---
+function $(sel) { return document.querySelector(sel); }
+function fmt$(n) { return n >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`; }
+function fmtTokens(n) { return n >= 1e6 ? `${(n/1e6).toFixed(1)}M` : n >= 1e3 ? `${(n/1e3).toFixed(0)}K` : `${n}`; }
+function fmtTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+  return d.toLocaleDateString();
+}
+async function api(path) {
+  const r = await fetch(`${API}${path}`, { headers: { 'ngrok-skip-browser-warning': 'true' } });
+  return r.json();
+}
+
+// --- Stats bar ---
+async function loadStats() {
+  const [agents, sessions] = await Promise.all([
+    api('/api/agents?status=all'),
+    api('/api/sessions?status=all')
+  ]);
+  const activeAgents = agents.agents.filter(a => a.status === 'active').length;
+  const totalCost = agents.agents.reduce((s,a) => s + a.costUsd, 0);
+  const totalTokens = agents.agents.reduce((s,a) => s + a.tokenCount, 0);
+  const activeSessions = sessions.sessions.filter(s => s.status === 'active').length;
+  $('#stats').innerHTML = `
+    <div class="stat-card"><div class="label">Active Agents</div><div class="value green">${activeAgents} / ${agents.agents.length}</div></div>
+    <div class="stat-card"><div class="label">Active Sessions</div><div class="value blue">${activeSessions}</div></div>
+    <div class="stat-card"><div class="label">Total Cost</div><div class="value green">${fmt$(totalCost)}</div></div>
+    <div class="stat-card"><div class="label">Total Tokens</div><div class="value purple">${fmtTokens(totalTokens)}</div></div>
+  `;
+  $('#last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+}
+
+// --- Agents tab ---
+async function loadAgents() {
+  const data = await api(`/api/agents?status=${statusFilter}`);
+  const app = $('#app');
+  if (!data.agents.length) { app.innerHTML = '<div class="empty">No agents found</div>'; return; }
+  app.innerHTML = `
+    <div class="filter-bar">
+      <button class="filter-btn ${statusFilter==='active'?'active':''}" onclick="setFilter('active')">Active</button>
+      <button class="filter-btn ${statusFilter==='idle'?'active':''}" onclick="setFilter('idle')">Idle</button>
+      <button class="filter-btn ${statusFilter==='all'?'active':''}" onclick="setFilter('all')">All</button>
+    </div>
+    <div class="agents-grid">${data.agents.map(a => `
+      <div class="agent-card" onclick="showAgent('${a.id}')">
+        <div class="dot ${a.status}"></div>
+        <div class="agent-info">
+          <div class="agent-name">${a.name || a.id}</div>
+          <div class="agent-meta">${a.host || 'local'} · Last seen ${fmtTime(a.lastHeartbeat)}</div>
+        </div>
+        <div class="agent-stats">
+          <div class="agent-cost">${fmt$(a.costUsd)}</div>
+          <div class="agent-tokens">${fmtTokens(a.tokenCount)} tokens</div>
+        </div>
+      </div>
+    `).join('')}</div>
+  `;
+}
+
+// --- Sessions tab ---
+async function loadSessions(agentId) {
+  const qs = agentId ? `?agentId=${agentId}&status=${statusFilter}` : `?status=${statusFilter}`;
+  const data = await api(`/api/sessions${qs}`);
+  const app = $('#app');
+  app.innerHTML = `
+    <div class="filter-bar">
+      <button class="filter-btn ${statusFilter==='active'?'active':''}" onclick="setFilter('active')">Active</button>
+      <button class="filter-btn ${statusFilter==='idle'?'active':''}" onclick="setFilter('idle')">Idle</button>
+      <button class="filter-btn ${statusFilter==='all'?'active':''}" onclick="setFilter('all')">All</button>
+      ${agentId ? `<button class="back-btn" onclick="switchTab('sessions')">← All sessions</button>` : ''}
+    </div>
+    <div class="sessions-list">${!data.sessions.length ? '<div class="empty">No sessions</div>' : data.sessions.map(s => `
+      <div class="session-card" onclick="showSession('${s.id}')">
+        <div class="session-header">
+          <div class="session-title">${esc(s.title)}</div>
+          <div class="session-cost">${fmt$(s.costUsd)}</div>
+        </div>
+        <div class="session-meta">
+          <span class="badge ${s.status}">${s.status}</span>
+          <span>${s.agentId}</span>
+          <span>${fmtTokens(s.tokenCount)} tokens</span>
+          <span>${s.messageCount} msgs</span>
+          <span>${fmtTime(s.lastActivityAt)}</span>
+        </div>
+      </div>
+    `).join('')}</div>
+  `;
+}
+
+// --- Session detail ---
+async function showSession(id) {
+  $('#app').innerHTML = '<div class="loading">Loading session...</div>';
+  const s = await api(`/api/sessions/${id}`);
+  const costByModel = s.costByModel || {};
+  $('#app').innerHTML = `
+    <div class="detail-panel">
+      <div class="detail-header">
+        <div>
+          <div class="detail-title">${esc(s.title)}</div>
+          <div style="color:var(--muted);margin-top:4px;">${s.agentId} · ${s.messageCount} messages · ${fmtTime(s.startedAt)}</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="back-btn" onclick="switchTab('sessions')">← Back</button>
+        </div>
+      </div>
+      <div class="cost-grid">
+        <div class="cost-item"><div class="cost-model">Total Cost</div><div class="cost-value">${fmt$(s.costUsd)}</div></div>
+        <div class="cost-item"><div class="cost-model">Tokens</div><div class="cost-value">${fmtTokens(s.tokenCount)}</div></div>
+        ${Object.entries(costByModel).map(([m,c]) => `
+          <div class="cost-item"><div class="cost-model">${m}</div><div class="cost-value">${fmt$(c)}</div></div>
+        `).join('')}
+      </div>
+      <h3 style="margin-bottom:12px;">Messages</h3>
+      <div class="messages">${(s.messages||[]).slice(0,100).map(m => `
+        <div class="msg ${m.role}">
+          <div class="msg-header">
+            <span class="msg-role">${m.role === 'user' ? '👤' : m.role === 'assistant' ? '🤖' : '🔧'} ${m.role}</span>
+            ${m.toolName ? `<span>${m.toolName}</span>` : ''}
+            ${m.costUsd ? `<span>${fmt$(m.costUsd)}</span>` : ''}
+            <span>${fmtTime(m.timestamp)}</span>
+          </div>
+          <div class="msg-content">${esc(m.content || '').slice(0,500)}</div>
+        </div>
+      `).join('')}</div>
+    </div>
+  `;
+}
+
+// --- Agent detail → sessions ---
+function showAgent(id) {
+  statusFilter = 'all';
+  loadSessions(id);
+}
+
+// --- Projects tab ---
+async function loadProjects() {
+  const data = await api('/api/projects');
+  const app = $('#app');
+  if (!data.projects.length) { app.innerHTML = '<div class="empty">No projects yet. Create one via API.</div>'; return; }
+  app.innerHTML = `<div class="projects-list">${data.projects.map(p => `
+    <div class="project-card" onclick="showProject('${p.id}')">
+      <div class="project-name">${esc(p.name)}</div>
+      <div class="project-stats">
+        <span>${p.sessionCount} sessions</span>
+        <span>${fmt$(p.totalCostUsd)}</span>
+        <span>${fmtTime(p.updatedAt)}</span>
+      </div>
+    </div>
+  `).join('')}</div>`;
+}
+
+async function showProject(id) {
+  $('#app').innerHTML = '<div class="loading">Loading project...</div>';
+  const p = await api(`/api/projects/${id}`);
+  $('#app').innerHTML = `
+    <div class="detail-panel">
+      <div class="detail-header">
+        <div>
+          <div class="detail-title">${esc(p.name)}</div>
+          <div style="color:var(--muted);margin-top:4px;">${p.stats.sessionCount} sessions · ${p.stats.totalMessages} messages</div>
+        </div>
+        <button class="back-btn" onclick="switchTab('projects')">← Back</button>
+      </div>
+      <div class="cost-grid">
+        <div class="cost-item"><div class="cost-model">Total Cost</div><div class="cost-value">${fmt$(p.stats.totalCostUsd)}</div></div>
+        <div class="cost-item"><div class="cost-model">Tokens</div><div class="cost-value">${fmtTokens(p.stats.totalTokens)}</div></div>
+      </div>
+      <h3 style="margin-bottom:12px;">Agent Breakdown</h3>
+      <div class="cost-grid" style="margin-bottom:20px;">${(p.agentBreakdown||[]).map(a => `
+        <div class="cost-item">
+          <div class="cost-model">${a.agentId} (${a.percentage}%)</div>
+          <div class="cost-value">${fmt$(a.costUsd)}</div>
+        </div>
+      `).join('')}</div>
+      <h3 style="margin-bottom:12px;">Unified Timeline</h3>
+      <div class="messages">${(p.timeline||[]).slice(0,100).map(m => `
+        <div class="msg ${m.role}">
+          <div class="msg-header">
+            <span class="timeline-agent">${m.agentId}</span>
+            <span class="msg-role">${m.role === 'user' ? '👤' : m.role === 'assistant' ? '🤖' : '🔧'} ${m.role}</span>
+            ${m.costUsd ? `<span>${fmt$(m.costUsd)}</span>` : ''}
+            <span>${fmtTime(m.timestamp)}</span>
+          </div>
+          <div class="msg-content">${esc(m.content || '').slice(0,500)}</div>
+        </div>
+      `).join('')}</div>
+    </div>
+  `;
+}
+
+// --- Alerts tab ---
+async function loadAlerts() {
+  const data = await api('/api/alerts');
+  const app = $('#app');
+  if (!data.alerts.length) { app.innerHTML = '<div class="empty">No alerts 🎉</div>'; return; }
+  app.innerHTML = `<div class="sessions-list">${data.alerts.map(a => `
+    <div class="session-card" style="border-left:3px solid ${a.severity==='critical'?'var(--red)':'var(--yellow)'};">
+      <div class="session-header">
+        <div class="session-title">${esc(a.message)}</div>
+        <span class="badge ${a.acknowledged?'completed':'active'}">${a.acknowledged?'acked':'open'}</span>
+      </div>
+      <div class="session-meta">
+        <span>${a.type}</span>
+        <span>${a.agentId}</span>
+        <span>${fmtTime(a.timestamp)}</span>
+      </div>
+    </div>
+  `).join('')}</div>`;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function setFilter(f) { statusFilter = f; switchTab(currentTab); }
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  statusFilter = tab === currentTab ? statusFilter : 'active';
+  if (tab === 'agents') loadAgents();
+  else if (tab === 'sessions') loadSessions();
+  else if (tab === 'projects') loadProjects();
+  else if (tab === 'alerts') loadAlerts();
+}
+
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+// Auto-refresh every 30s
+setInterval(() => { loadStats(); switchTab(currentTab); }, 30000);
+
+// Init
+loadStats();
+loadAgents();
+</script>
+</body>
+</html>

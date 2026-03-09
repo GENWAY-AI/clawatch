@@ -29,6 +29,7 @@
   },
   "files": [
     "dist/**/*",
+    "backend/**/*",
     "README.md",
     "LICENSE"
   ],

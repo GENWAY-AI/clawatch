@@ -16,10 +16,10 @@ echo "  Building frontend..."
 cd "$ROOT/frontend"
 NEXT_PUBLIC_USE_MOCK="" npm run build
 
-# 3. Build CLI
+# 3. Build CLI (run tsc directly to avoid recursion — cli's npm run build calls this script)
 echo "  Building CLI..."
 cd "$ROOT/cli"
-npm run build
+npx tsc
 
 # 4. Bundle backend into CLI
 echo "  Bundling backend..."
@@ -40,8 +40,27 @@ rm -rf "$ROOT/cli/frontend"
 mkdir -p "$ROOT/cli/frontend"
 
 # Copy standalone server (includes server.js, node_modules, .next/server/)
+# Next.js standalone output may be nested under project path due to outputFileTracingRoot
+# Detect the correct source directory
+STANDALONE_DIR="$ROOT/frontend/.next/standalone"
+if [ -d "$STANDALONE_DIR/clawatch/frontend" ]; then
+  # Nested structure: standalone/clawatch/frontend/{.next, node_modules, server.js, ...}
+  STANDALONE_SRC="$STANDALONE_DIR/clawatch/frontend"
+elif [ -f "$STANDALONE_DIR/server.js" ]; then
+  # Flat structure: standalone/{.next, node_modules, server.js, ...}
+  STANDALONE_SRC="$STANDALONE_DIR"
+else
+  # Try finding it dynamically
+  STANDALONE_SRC=$(find "$STANDALONE_DIR" -name "server.js" -maxdepth 4 -exec dirname {} \; | head -1)
+  if [ -z "$STANDALONE_SRC" ]; then
+    echo "  ❌ Could not find standalone server.js output!"
+    exit 1
+  fi
+fi
+echo "  Standalone source: $STANDALONE_SRC"
+
 # Use rsync to include hidden dirs like .next/
-rsync -a "$ROOT/frontend/.next/standalone/" "$ROOT/cli/frontend/"
+rsync -a "$STANDALONE_SRC/" "$ROOT/cli/frontend/"
 
 # Copy static assets INTO the existing .next dir
 cp -r "$ROOT/frontend/.next/static" "$ROOT/cli/frontend/.next/"

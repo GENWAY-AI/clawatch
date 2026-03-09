@@ -1,6 +1,6 @@
 {
   "name": "clawatch",
-  "version": "1.0.14",
+  "version": "1.0.16",
   "description": "Observability & monitoring for AI agents. Track costs, tokens, sessions, and get alerts when things go wrong.",
   "author": "GENWAY AI <hello@genway.ai>",
   "license": "MIT",
@@ -31,6 +31,7 @@
     "dist/**/*",
     "backend/**/*",
     "frontend/**/*",
+    "frontend/.next/**/*",
     "README.md",
     "LICENSE"
   ],
@@ -38,10 +39,9 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "bash ../scripts/build-npm.sh",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
-    "prepublishOnly": "npm run build",
     "postinstall": "cd backend && npm rebuild better-sqlite3 2>/dev/null || true"
   },
   "dependencies": {

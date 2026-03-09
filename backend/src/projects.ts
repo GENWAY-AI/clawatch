@@ -161,6 +161,7 @@ export async function getProjectDetail(projectId: string): Promise<ProjectDetail
         startedAt: detail.startedAt,
         lastActivityAt: detail.lastActivityAt,
         duration: detail.duration,
+        costByModel: detail.costByModel,
       });
 
       // Aggregate stats

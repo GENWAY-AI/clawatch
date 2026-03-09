@@ -45,12 +45,24 @@ function autoInit(): ClaWatchConfig {
 
 // --- Default command: start everything ---
 program
-  .command('up', { isDefault: true })
+  .command('start', { isDefault: true })
   .description('Start ClaWatch: backend + monitoring + dashboard')
   .option('-p, --port <port>', 'Dashboard port', '3001')
   .option('--no-open', 'Don\'t open browser')
   .action(async (opts) => {
     console.log(chalk.bold('\n🔍 ClaWatch — AI Agent Observability\n'));
+
+    // Kill existing daemon if running
+    if (fs.existsSync(paths.pid)) {
+      const oldPid = parseInt(fs.readFileSync(paths.pid, 'utf-8').trim(), 10);
+      try {
+        process.kill(oldPid, 'SIGTERM');
+        console.log(chalk.yellow(`Stopped previous daemon (PID: ${oldPid})`));
+      } catch {
+        // Already dead
+      }
+      fs.unlinkSync(paths.pid);
+    }
 
     // Auto-init if needed
     if (!configExists()) {
@@ -213,45 +225,7 @@ program
     console.log(`  Agents found: ${agents.length} (${agents.join(', ')})`);
   });
 
-program
-  .command('start')
-  .description('Start the ClaWatch monitoring daemon (background)')
-  .action(() => {
-    ensureDir();
-
-    if (!configExists()) {
-      console.log(chalk.yellow('Not initialized — running auto-init...'));
-      autoInit();
-    }
-
-    if (fs.existsSync(paths.pid)) {
-      const pid = parseInt(fs.readFileSync(paths.pid, 'utf-8').trim(), 10);
-      try {
-        process.kill(pid, 0);
-        console.log(chalk.yellow(`Daemon already running (PID: ${pid})`));
-        process.exit(0);
-      } catch {
-        fs.unlinkSync(paths.pid);
-      }
-    }
-
-    const daemonPath = path.join(__dirname, 'daemon.js');
-    const child = fork(daemonPath, [], {
-      detached: true,
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
-    });
-
-    if (child.pid) {
-      fs.writeFileSync(paths.pid, String(child.pid));
-      child.unref();
-      child.disconnect();
-      console.log(chalk.green(`Daemon started (PID: ${child.pid})`));
-      console.log(`  Logs: ${paths.log}`);
-    } else {
-      console.log(chalk.red('Failed to start daemon'));
-      process.exit(1);
-    }
-  });
+// 'start' is the default command (see above) — no separate start needed
 
 program
   .command('stop')

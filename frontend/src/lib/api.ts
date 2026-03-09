@@ -1,6 +1,9 @@
 import { Agent, Alert, CostData, Session, SessionDetail, Project, ProjectDetail } from "./types";
 import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails } from "./mock-data";
 
+// API_BASE: In the npm CLI, both frontend and API run on different ports.
+// The frontend server proxies /api/* to the backend, so we use relative URLs.
+// If NEXT_PUBLIC_API_URL is set (e.g. for hosted deployment), use that instead.
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 // Use real API by default (mock only if NEXT_PUBLIC_USE_MOCK=true)
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";

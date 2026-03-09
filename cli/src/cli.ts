@@ -204,7 +204,8 @@ program
     let frontendProcess: ChildProcess | null = null;
 
     if (frontendDir) {
-      const serverJs = path.join(frontendDir, 'server.js');
+      const proxyServer = path.join(frontendDir, 'server-with-proxy.js');
+      const serverJs = fs.existsSync(proxyServer) ? proxyServer : path.join(frontendDir, 'server.js');
       if (fs.existsSync(serverJs)) {
         console.log(chalk.blue('Starting dashboard...'));
         frontendProcess = spawn('node', [serverJs], {
@@ -213,7 +214,7 @@ program
             ...process.env,
             PORT: FRONTEND_PORT,
             HOSTNAME: '0.0.0.0',
-            BACKEND_URL: `http://localhost:${BACKEND_PORT}`,
+            BACKEND_PORT: BACKEND_PORT,
           },
           stdio: ['ignore', 'pipe', 'pipe'],
         });

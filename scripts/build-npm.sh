@@ -51,6 +51,9 @@ if [ -d "$ROOT/frontend/public" ]; then
   cp -r "$ROOT/frontend/public" "$ROOT/cli/frontend/public"
 fi
 
+# Replace server.js with our proxy-enabled version
+cp "$ROOT/frontend/server-with-proxy.js" "$ROOT/cli/frontend/server-with-proxy.js"
+
 # Verify .next has everything
 echo "  Verifying frontend bundle..."
 for f in BUILD_ID server routes-manifest.json static; do

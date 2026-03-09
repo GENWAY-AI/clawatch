@@ -1,5 +1,5 @@
-import { Agent, Alert, CostData } from "./types";
-import { mockAgents, mockAlerts, mockCosts } from "./mock-data";
+import { Agent, Alert, CostData, Session, SessionDetail } from "./types";
+import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails } from "./mock-data";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 const USE_MOCK = !process.env.NEXT_PUBLIC_API_URL;
@@ -62,4 +62,48 @@ export async function resumeAgent(id: string): Promise<void> {
 export async function acknowledgeAlert(id: string): Promise<void> {
   if (USE_MOCK) return;
   await fetchJson(`/api/alerts/${id}/acknowledge`, { method: "POST" });
+}
+
+export async function getSessions(
+  agentId?: string,
+  status?: string,
+  sort?: string
+): Promise<Session[]> {
+  if (USE_MOCK) {
+    let sessions = [...mockSessions];
+    if (agentId) sessions = sessions.filter((s) => s.agentId === agentId);
+    if (status) sessions = sessions.filter((s) => s.status === status);
+    if (sort === "cost") sessions.sort((a, b) => b.costUsd - a.costUsd);
+    else if (sort === "tokens") sessions.sort((a, b) => b.tokenCount - a.tokenCount);
+    else sessions.sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime());
+    return sessions;
+  }
+  try {
+    const params = new URLSearchParams();
+    if (agentId) params.set("agentId", agentId);
+    if (status) params.set("status", status);
+    if (sort) params.set("sort", sort);
+    const qs = params.toString();
+    const data = await fetchJson<{ sessions: Session[] }>(`/api/sessions${qs ? `?${qs}` : ""}`);
+    return data.sessions;
+  } catch {
+    console.warn("API unreachable, falling back to mock data");
+    return mockSessions;
+  }
+}
+
+export async function getSession(id: string): Promise<SessionDetail> {
+  if (USE_MOCK) {
+    const detail = mockSessionDetails[id];
+    if (detail) return detail;
+    throw new Error("Session not found");
+  }
+  try {
+    return await fetchJson<SessionDetail>(`/api/sessions/${id}`);
+  } catch {
+    console.warn("API unreachable, falling back to mock data");
+    const detail = mockSessionDetails[id];
+    if (detail) return detail;
+    throw new Error("Session not found");
+  }
 }

@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Agent, Alert, CostData, AgentStatus, AlertSeverity } from "@/lib/types";
-import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert } from "@/lib/api";
+import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus } from "@/lib/types";
+import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, getSessions } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 
 function formatRelativeTime(iso: string): string {
@@ -34,24 +35,46 @@ const statusConfig: Record<AgentStatus, { color: string; dot: string; label: str
   stuck: { color: "bg-orange-500/10 text-orange-400 border-orange-500/20", dot: "bg-orange-400 animate-pulse", label: "Stuck" },
 };
 
+const sessionStatusConfig: Record<SessionStatus, { color: string; dot: string; label: string }> = {
+  active: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Active" },
+  idle: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400", label: "Idle" },
+  completed: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Completed" },
+};
+
+const agentColors: Record<string, string> = {
+  ofek: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  anas: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  dor: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+};
+
 const severityConfig: Record<AlertSeverity, { color: string; icon: string }> = {
   critical: { color: "bg-red-500/10 text-red-400 border-red-500/20", icon: "!" },
   warning: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", icon: "!" },
   info: { color: "bg-blue-500/10 text-blue-400 border-blue-500/20", icon: "i" },
 };
 
+type Tab = "agents" | "sessions";
+type SessionFilter = "all" | "active" | "idle" | "completed";
+type SessionSort = "recent" | "cost" | "tokens";
+
 export default function DashboardPage() {
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>("agents");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [costs, setCosts] = useState<CostData | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionFilter, setSessionFilter] = useState<SessionFilter>("all");
+  const [sessionSort, setSessionSort] = useState<SessionSort>("recent");
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [a, al, c] = await Promise.all([getAgents(), getAlerts(), getCosts()]);
+      const [a, al, c, s] = await Promise.all([getAgents(), getAlerts(), getCosts(), getSessions()]);
       setAgents(a);
       setAlerts(al);
       setCosts(c);
+      setSessions(s);
     } finally {
       setLoading(false);
     }
@@ -67,6 +90,14 @@ export default function DashboardPage() {
   const criticalAlerts = unackedAlerts.filter((a) => a.severity === "critical" || a.severity === "warning");
   const runningCount = agents.filter((a) => a.status === "running").length;
   const totalCost = costs?.totalUsd ?? 0;
+
+  const filteredSessions = sessions
+    .filter((s) => sessionFilter === "all" || s.status === sessionFilter)
+    .sort((a, b) => {
+      if (sessionSort === "cost") return b.costUsd - a.costUsd;
+      if (sessionSort === "tokens") return b.tokenCount - a.tokenCount;
+      return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
+    });
 
   async function handlePauseResume(agent: Agent) {
     if (agent.status === "running") {
@@ -184,174 +215,307 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Agent List */}
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Agents</h2>
-          <div className="grid gap-3">
-            {agents.map((agent) => {
-              const sc = statusConfig[agent.status];
-              return (
-                <div
-                  key={agent.id}
-                  className="rounded-xl border border-border/50 bg-card p-4 flex items-center gap-4 hover:border-border transition-colors"
-                >
-                  {/* Status dot + name */}
-                  <div className="flex items-center gap-3 min-w-[200px]">
-                    <span className={`size-2.5 rounded-full ${sc.dot}`} />
-                    <div>
-                      <div className="font-medium">{agent.name}</div>
-                      <div className="text-xs text-muted-foreground">{agent.host}</div>
-                    </div>
-                  </div>
-
-                  {/* Status badge */}
-                  <Badge variant="outline" className={`${sc.color} border text-xs`}>
-                    {sc.label}
-                  </Badge>
-
-                  {/* Stats */}
-                  <div className="flex items-center gap-6 ml-auto text-sm text-muted-foreground">
-                    <div className="text-right min-w-[80px]">
-                      <div className="text-foreground font-medium">${agent.costUsd.toFixed(2)}</div>
-                      <div className="text-xs">cost</div>
-                    </div>
-                    <div className="text-right min-w-[80px]">
-                      <div className="text-foreground font-medium">{formatTokens(agent.tokenCount)}</div>
-                      <div className="text-xs">tokens</div>
-                    </div>
-                    <div className="text-right min-w-[60px]">
-                      <div className={`font-medium ${agent.errorCount > 0 ? "text-red-400" : "text-foreground"}`}>
-                        {agent.errorCount}
-                      </div>
-                      <div className="text-xs">errors</div>
-                    </div>
-                    <div className="text-right min-w-[80px]">
-                      <div className="text-foreground font-medium">{formatRelativeTime(agent.lastHeartbeat)}</div>
-                      <div className="text-xs">heartbeat</div>
-                    </div>
-
-                    {/* Pause/Resume */}
-                    <div className="min-w-[90px]">
-                      {(agent.status === "running" || agent.status === "paused") && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handlePauseResume(agent)}
-                          className="w-full text-xs"
-                        >
-                          {agent.status === "running" ? "Pause" : "Resume"}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* Tabs */}
+        <div className="flex items-center gap-1 border-b border-border/50">
+          <button
+            onClick={() => setTab("agents")}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${
+              tab === "agents"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Agents
+            {tab === "agents" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
+            )}
+          </button>
+          <button
+            onClick={() => setTab("sessions")}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${
+              tab === "sessions"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Sessions
+            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
+              {sessions.length}
+            </Badge>
+            {tab === "sessions" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
+            )}
+          </button>
         </div>
 
-        {/* Cost Overview */}
-        {costs && (
-          <div className="grid lg:grid-cols-2 gap-6">
+        {/* Agents Tab */}
+        {tab === "agents" && (
+          <>
+            {/* Agent List */}
             <div>
-              <h2 className="text-lg font-semibold mb-4">Cost by Agent</h2>
-              <Card>
-                <CardContent className="pt-4 space-y-3">
-                  {costs.byAgent
-                    .sort((a, b) => b.costUsd - a.costUsd)
-                    .map((item) => (
-                      <div key={item.agentId} className="flex items-center justify-between">
-                        <span className="text-sm">{item.name}</span>
-                        <div className="flex items-center gap-3">
-                          <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-emerald-500"
-                              style={{ width: `${(item.costUsd / costs.totalUsd) * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium w-16 text-right">
-                            ${item.costUsd.toFixed(2)}
-                          </span>
+              <h2 className="text-lg font-semibold mb-4">Agents</h2>
+              <div className="grid gap-3">
+                {agents.map((agent) => {
+                  const sc = statusConfig[agent.status];
+                  return (
+                    <div
+                      key={agent.id}
+                      className="rounded-xl border border-border/50 bg-card p-4 flex items-center gap-4 hover:border-border transition-colors"
+                    >
+                      {/* Status dot + name */}
+                      <div className="flex items-center gap-3 min-w-[200px]">
+                        <span className={`size-2.5 rounded-full ${sc.dot}`} />
+                        <div>
+                          <div className="font-medium">{agent.name}</div>
+                          <div className="text-xs text-muted-foreground">{agent.host}</div>
                         </div>
                       </div>
-                    ))}
+
+                      {/* Status badge */}
+                      <Badge variant="outline" className={`${sc.color} border text-xs`}>
+                        {sc.label}
+                      </Badge>
+
+                      {/* Stats */}
+                      <div className="flex items-center gap-6 ml-auto text-sm text-muted-foreground">
+                        <div className="text-right min-w-[80px]">
+                          <div className="text-foreground font-medium">${agent.costUsd.toFixed(2)}</div>
+                          <div className="text-xs">cost</div>
+                        </div>
+                        <div className="text-right min-w-[80px]">
+                          <div className="text-foreground font-medium">{formatTokens(agent.tokenCount)}</div>
+                          <div className="text-xs">tokens</div>
+                        </div>
+                        <div className="text-right min-w-[60px]">
+                          <div className={`font-medium ${agent.errorCount > 0 ? "text-red-400" : "text-foreground"}`}>
+                            {agent.errorCount}
+                          </div>
+                          <div className="text-xs">errors</div>
+                        </div>
+                        <div className="text-right min-w-[80px]">
+                          <div className="text-foreground font-medium">{formatRelativeTime(agent.lastHeartbeat)}</div>
+                          <div className="text-xs">heartbeat</div>
+                        </div>
+
+                        {/* Pause/Resume */}
+                        <div className="min-w-[90px]">
+                          {(agent.status === "running" || agent.status === "paused") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handlePauseResume(agent)}
+                              className="w-full text-xs"
+                            >
+                              {agent.status === "running" ? "Pause" : "Resume"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Cost Overview */}
+            {costs && (
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div>
+                  <h2 className="text-lg font-semibold mb-4">Cost by Agent</h2>
+                  <Card>
+                    <CardContent className="pt-4 space-y-3">
+                      {costs.byAgent
+                        .sort((a, b) => b.costUsd - a.costUsd)
+                        .map((item) => (
+                          <div key={item.agentId} className="flex items-center justify-between">
+                            <span className="text-sm">{item.name}</span>
+                            <div className="flex items-center gap-3">
+                              <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-emerald-500"
+                                  style={{ width: `${(item.costUsd / costs.totalUsd) * 100}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-medium w-16 text-right">
+                                ${item.costUsd.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                    </CardContent>
+                  </Card>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold mb-4">Cost by Model</h2>
+                  <Card>
+                    <CardContent className="pt-4 space-y-3">
+                      {costs.byModel
+                        .sort((a, b) => b.costUsd - a.costUsd)
+                        .map((item) => (
+                          <div key={item.model} className="flex items-center justify-between">
+                            <span className="text-sm font-mono">{item.model}</span>
+                            <div className="flex items-center gap-3">
+                              <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-emerald-500"
+                                  style={{ width: `${(item.costUsd / costs.totalUsd) * 100}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-medium w-16 text-right">
+                                ${item.costUsd.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {/* All Alerts */}
+            <div>
+              <h2 className="text-lg font-semibold mb-4">All Alerts</h2>
+              <Card>
+                <CardContent className="pt-4 space-y-2">
+                  {alerts.map((alert) => {
+                    const sc = severityConfig[alert.severity];
+                    return (
+                      <div
+                        key={alert.id}
+                        className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-sm ${
+                          alert.acknowledged ? "opacity-50" : ""
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className={`${sc.color} border text-[10px] uppercase font-bold`}>
+                            {alert.severity}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px] uppercase">
+                            {alert.type.replace("_", " ")}
+                          </Badge>
+                          <span>{alert.message}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-muted-foreground">
+                            {formatRelativeTime(alert.timestamp)}
+                          </span>
+                          {!alert.acknowledged && (
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              onClick={() => handleAcknowledge(alert.id)}
+                            >
+                              Ack
+                            </Button>
+                          )}
+                          {alert.acknowledged && (
+                            <span className="text-xs text-muted-foreground">Acked</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </CardContent>
               </Card>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold mb-4">Cost by Model</h2>
-              <Card>
-                <CardContent className="pt-4 space-y-3">
-                  {costs.byModel
-                    .sort((a, b) => b.costUsd - a.costUsd)
-                    .map((item) => (
-                      <div key={item.model} className="flex items-center justify-between">
-                        <span className="text-sm font-mono">{item.model}</span>
-                        <div className="flex items-center gap-3">
-                          <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-emerald-500"
-                              style={{ width: `${(item.costUsd / costs.totalUsd) * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium w-16 text-right">
-                            ${item.costUsd.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+          </>
         )}
 
-        {/* All Alerts */}
-        <div>
-          <h2 className="text-lg font-semibold mb-4">All Alerts</h2>
-          <Card>
-            <CardContent className="pt-4 space-y-2">
-              {alerts.map((alert) => {
-                const sc = severityConfig[alert.severity];
-                return (
-                  <div
-                    key={alert.id}
-                    className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-sm ${
-                      alert.acknowledged ? "opacity-50" : ""
+        {/* Sessions Tab */}
+        {tab === "sessions" && (
+          <div>
+            {/* Filters + Sort */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-1">
+                {(["all", "active", "idle", "completed"] as SessionFilter[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setSessionFilter(f)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      sessionFilter === f
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className={`${sc.color} border text-[10px] uppercase font-bold`}>
-                        {alert.severity}
-                      </Badge>
-                      <Badge variant="outline" className="text-[10px] uppercase">
-                        {alert.type.replace("_", " ")}
-                      </Badge>
-                      <span>{alert.message}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground">
-                        {formatRelativeTime(alert.timestamp)}
-                      </span>
-                      {!alert.acknowledged && (
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          onClick={() => handleAcknowledge(alert.id)}
-                        >
-                          Ack
-                        </Button>
-                      )}
-                      {alert.acknowledged && (
-                        <span className="text-xs text-muted-foreground">Acked</span>
-                      )}
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-muted-foreground mr-1">Sort:</span>
+                {(["recent", "cost", "tokens"] as SessionSort[]).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setSessionSort(s)}
+                    className={`px-2.5 py-1.5 rounded-md font-medium transition-colors ${
+                      sessionSort === s
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Session Cards */}
+            <div className="grid gap-3">
+              {filteredSessions.map((session) => {
+                const sc = sessionStatusConfig[session.status];
+                return (
+                  <div
+                    key={session.id}
+                    onClick={() => router.push(`/dashboard/sessions/${session.id}`)}
+                    className="rounded-xl border border-border/50 bg-card p-4 hover:border-border transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* Status dot */}
+                      <span className={`size-2.5 rounded-full mt-1.5 shrink-0 ${sc.dot}`} />
+
+                      {/* Title + meta */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium truncate max-w-[500px] group-hover:text-emerald-400 transition-colors">
+                            {session.title.length > 80 ? session.title.slice(0, 80) + "..." : session.title}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className={`text-[10px] border ${agentColors[session.agentId] || "text-zinc-400"}`}>
+                            {session.agentId}
+                          </Badge>
+                          <span className="text-[11px] font-mono text-muted-foreground">
+                            {session.model}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {session.messageCount} msgs
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {formatRelativeTime(session.lastActivityAt)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right stats */}
+                      <div className="flex items-center gap-4 shrink-0 text-sm">
+                        <div className="text-right">
+                          <div className="font-bold">${session.costUsd.toFixed(2)}</div>
+                          <div className="text-[11px] text-muted-foreground">{formatTokens(session.tokenCount)}</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
-        </div>
+              {filteredSessions.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  No sessions found for the selected filter.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

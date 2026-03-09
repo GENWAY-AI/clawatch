@@ -41,3 +41,37 @@ export interface CostData {
   byAgent: { agentId: string; name: string; costUsd: number }[];
   byModel: { model: string; costUsd: number }[];
 }
+
+export type SessionStatus = "active" | "idle" | "completed";
+
+export interface Session {
+  id: string;
+  agentId: string;
+  title: string;
+  status: SessionStatus;
+  costUsd: number;
+  tokenCount: number;
+  messageCount: number;
+  model: string;
+  startedAt: string;
+  lastActivityAt: string;
+  duration: number;
+}
+
+export interface SessionDetail extends Session {
+  costByModel: { model: string; costUsd: number; tokenCount: number }[];
+  tokenBreakdown: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  messages: SessionMessage[];
+}
+
+export interface SessionMessage {
+  id: string;
+  role: "user" | "assistant" | "tool" | "system";
+  timestamp: string;
+  content: string;
+  toolName?: string;
+  toolInput?: string;
+  model?: string;
+  costUsd?: number;
+  tokenCount?: number;
+}

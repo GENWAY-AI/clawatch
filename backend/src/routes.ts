@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuid } from "uuid";
 import db from "./db";
+import { listSessions, getSessionDetail } from "./sessions";
 
 const router = Router();
 
@@ -177,6 +178,56 @@ router.post("/alerts/:id/acknowledge", (req: Request, res: Response) => {
     return;
   }
   res.json({ ok: true });
+});
+
+// ---------- Sessions (from JSONL files) ----------
+
+router.get("/sessions", async (req: Request, res: Response) => {
+  try {
+    let sessions = await listSessions();
+
+    // Filter by agentId
+    const { agentId, status, sort, limit } = req.query;
+    if (agentId) {
+      sessions = sessions.filter((s) => s.agentId === agentId);
+    }
+
+    // Filter by status
+    if (status && typeof status === "string") {
+      const statuses = status.split(",");
+      sessions = sessions.filter((s) => statuses.includes(s.status));
+    }
+
+    // Sort
+    if (sort === "cost") {
+      sessions.sort((a, b) => b.costUsd - a.costUsd);
+    } else if (sort === "tokens") {
+      sessions.sort((a, b) => b.tokenCount - a.tokenCount);
+    }
+    // default: already sorted by lastActivityAt DESC
+
+    // Limit
+    const limitStr = Array.isArray(limit) ? limit[0] : limit;
+    const max = Math.min(parseInt(limitStr as string, 10) || 50, 500);
+    sessions = sessions.slice(0, max);
+
+    res.json({ sessions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to list sessions" });
+  }
+});
+
+router.get("/sessions/:id", async (req: Request, res: Response) => {
+  try {
+    const detail = await getSessionDetail(req.params.id as string);
+    if (!detail) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+    res.json(detail);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to get session detail" });
+  }
 });
 
 export default router;

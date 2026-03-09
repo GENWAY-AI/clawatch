@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus } from "@/lib/types";
-import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, getSessions } from "@/lib/api";
+import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project } from "@/lib/types";
+import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, getSessions, getProjects, createProject } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 
 function formatRelativeTime(iso: string): string {
@@ -53,7 +53,7 @@ const severityConfig: Record<AlertSeverity, { color: string; icon: string }> = {
   info: { color: "bg-blue-500/10 text-blue-400 border-blue-500/20", icon: "i" },
 };
 
-type Tab = "agents" | "sessions";
+type Tab = "agents" | "sessions" | "projects";
 type SessionFilter = "all" | "active" | "idle" | "completed";
 type SessionSort = "recent" | "cost" | "tokens";
 
@@ -64,17 +64,22 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [costs, setCosts] = useState<CostData | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [sessionFilter, setSessionFilter] = useState<SessionFilter>("all");
   const [sessionSort, setSessionSort] = useState<SessionSort>("recent");
   const [loading, setLoading] = useState(true);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDesc, setNewProjectDesc] = useState("");
 
   const fetchData = useCallback(async () => {
     try {
-      const [a, al, c, s] = await Promise.all([getAgents(), getAlerts(), getCosts(), getSessions()]);
+      const [a, al, c, s, p] = await Promise.all([getAgents(), getAlerts(), getCosts(), getSessions(), getProjects()]);
       setAgents(a);
       setAlerts(al);
       setCosts(c);
       setSessions(s);
+      setProjects(p);
     } finally {
       setLoading(false);
     }
@@ -243,6 +248,22 @@ export default function DashboardPage() {
               {sessions.length}
             </Badge>
             {tab === "sessions" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
+            )}
+          </button>
+          <button
+            onClick={() => setTab("projects")}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${
+              tab === "projects"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Projects
+            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
+              {projects.length}
+            </Badge>
+            {tab === "projects" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
             )}
           </button>
@@ -511,6 +532,94 @@ export default function DashboardPage() {
               {filteredSessions.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground text-sm">
                   No sessions found for the selected filter.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Projects Tab */}
+        {tab === "projects" && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Projects</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                onClick={() => setShowNewProject(!showNewProject)}
+              >
+                {showNewProject ? "Cancel" : "+ New Project"}
+              </Button>
+            </div>
+
+            {/* New Project Form */}
+            {showNewProject && (
+              <Card className="mb-4">
+                <CardContent className="pt-4 space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Project name"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    className="w-full bg-background border border-border/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500/50"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    value={newProjectDesc}
+                    onChange={(e) => setNewProjectDesc(e.target.value)}
+                    className="w-full bg-background border border-border/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500/50"
+                  />
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                    disabled={!newProjectName.trim()}
+                    onClick={async () => {
+                      const p = await createProject(newProjectName.trim(), newProjectDesc.trim());
+                      setProjects((prev) => [p, ...prev]);
+                      setNewProjectName("");
+                      setNewProjectDesc("");
+                      setShowNewProject(false);
+                    }}
+                  >
+                    Create Project
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Project Cards */}
+            <div className="grid gap-3">
+              {projects.map((project) => (
+                <div
+                  key={project.id}
+                  onClick={() => router.push(`/dashboard/projects/${project.id}`)}
+                  className="rounded-xl border border-border/50 bg-card p-5 hover:border-emerald-500/30 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-base group-hover:text-emerald-400 transition-colors mb-1">
+                        {project.name}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-3 line-clamp-1">
+                        {project.description}
+                      </p>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>{project.sessionCount} sessions</span>
+                        <span>{formatRelativeTime(project.updatedAt)}</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 ml-4">
+                      <div className="text-xl font-bold">${project.totalCostUsd.toFixed(2)}</div>
+                      <div className="text-[11px] text-muted-foreground">total cost</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {projects.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  No projects yet. Create one to group sessions together.
                 </div>
               )}
             </div>

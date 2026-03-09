@@ -1,5 +1,5 @@
-import { Agent, Alert, CostData, Session, SessionDetail } from "./types";
-import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails } from "./mock-data";
+import { Agent, Alert, CostData, Session, SessionDetail, Project, ProjectDetail } from "./types";
+import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails } from "./mock-data";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 const USE_MOCK = !process.env.NEXT_PUBLIC_API_URL;
@@ -106,4 +106,64 @@ export async function getSession(id: string): Promise<SessionDetail> {
     if (detail) return detail;
     throw new Error("Session not found");
   }
+}
+
+export async function getProjects(): Promise<Project[]> {
+  if (USE_MOCK) return mockProjects;
+  try {
+    const data = await fetchJson<{ projects: Project[] }>("/api/projects");
+    return data.projects;
+  } catch {
+    console.warn("API unreachable, falling back to mock data");
+    return mockProjects;
+  }
+}
+
+export async function getProject(id: string): Promise<ProjectDetail> {
+  if (USE_MOCK) {
+    const detail = mockProjectDetails[id];
+    if (detail) return detail;
+    throw new Error("Project not found");
+  }
+  try {
+    return await fetchJson<ProjectDetail>(`/api/projects/${id}`);
+  } catch {
+    console.warn("API unreachable, falling back to mock data");
+    const detail = mockProjectDetails[id];
+    if (detail) return detail;
+    throw new Error("Project not found");
+  }
+}
+
+export async function createProject(name: string, description: string): Promise<Project> {
+  if (USE_MOCK) {
+    return {
+      id: `project-${Date.now()}`,
+      name,
+      description,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      sessionCount: 0,
+      totalCostUsd: 0,
+    };
+  }
+  return await fetchJson<Project>("/api/projects", {
+    method: "POST",
+    body: JSON.stringify({ name, description }),
+  });
+}
+
+export async function addSessionToProject(projectId: string, sessionId: string): Promise<void> {
+  if (USE_MOCK) return;
+  await fetchJson(`/api/projects/${projectId}/sessions`, {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  });
+}
+
+export async function removeSessionFromProject(projectId: string, sessionId: string): Promise<void> {
+  if (USE_MOCK) return;
+  await fetchJson(`/api/projects/${projectId}/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
 }

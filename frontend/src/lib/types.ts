@@ -75,3 +75,47 @@ export interface SessionMessage {
   costUsd?: number;
   tokenCount?: number;
 }
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  sessionCount: number;
+  totalCostUsd: number;
+}
+
+export interface ProjectDetail {
+  id: string;
+  name: string;
+  description: string;
+  stats: {
+    totalCostUsd: number;
+    totalTokens: number;
+    totalMessages: number;
+    sessionCount: number;
+    dateRange: { from: string; to: string };
+  };
+  agentBreakdown: {
+    agentId: string;
+    costUsd: number;
+    tokenCount: number;
+    messageCount: number;
+    percentage: number;
+  }[];
+  sessions: Session[];
+  timeline: TimelineMessage[];
+}
+
+export interface TimelineMessage {
+  sessionId: string;
+  agentId: string;
+  id: string;
+  role: "user" | "assistant" | "tool" | "system";
+  timestamp: string;
+  content: string;
+  toolName?: string;
+  model?: string;
+  costUsd?: number;
+}

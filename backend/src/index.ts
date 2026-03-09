@@ -7,6 +7,7 @@ import { initDb } from "./db";
 import { initTelegram } from "./telegram";
 import { startAlertChecker } from "./alertChecker";
 import routes from "./routes";
+import { syncAllData } from "./sync";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const API_KEY = process.env.API_KEY || "";
@@ -45,7 +46,13 @@ app.get("*", (_req, res) => {
 // Init
 initDb();
 initTelegram();
-startAlertChecker();
+
+// Sync all data from ~/.openclaw JSONL files into DB on startup
+syncAllData().then(() => {
+  startAlertChecker();
+  // Re-sync periodically (every 60s) to keep DB in sync with JSONL
+  setInterval(() => syncAllData(), 60_000);
+});
 
 app.listen(PORT, () => {
   console.log(`[ClaWatch] Backend running on http://localhost:${PORT}`);

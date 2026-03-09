@@ -42,7 +42,7 @@ let cachedSessions: SessionSummary[] | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 30_000;
 
-function invalidateCache() {
+export function invalidateCache() {
   cachedSessions = null;
   cacheTimestamp = 0;
 }

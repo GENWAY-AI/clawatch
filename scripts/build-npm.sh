@@ -52,7 +52,33 @@ if [ -d "$ROOT/frontend/public" ]; then
   cp -r "$ROOT/frontend/public/"* "$ROOT/cli/frontend/public/" 2>/dev/null || true
 fi
 
-# 6. Check sizes
+# 6. Strip bloat from node_modules
+echo "  Stripping unnecessary files..."
+
+# Frontend: remove typescript (not needed at runtime)
+rm -rf "$ROOT/cli/frontend/node_modules/typescript"
+# Frontend: remove @img (sharp image processing, not needed)  
+rm -rf "$ROOT/cli/frontend/node_modules/@img"
+
+# Backend: remove es-abstract (10MB, unused runtime dep from transitive)
+rm -rf "$ROOT/cli/backend/node_modules/es-abstract"
+# Backend: remove lodash (5MB, can be replaced)
+rm -rf "$ROOT/cli/backend/node_modules/lodash"
+# Backend: strip better-sqlite3 source/docs (keep build + lib only)
+rm -rf "$ROOT/cli/backend/node_modules/better-sqlite3/deps"
+rm -rf "$ROOT/cli/backend/node_modules/better-sqlite3/src"
+rm -rf "$ROOT/cli/backend/node_modules/better-sqlite3/docs"
+# Backend: remove test/example dirs
+find "$ROOT/cli/backend/node_modules" -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
+find "$ROOT/cli/backend/node_modules" -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
+find "$ROOT/cli/backend/node_modules" -type d -name "example" -exec rm -rf {} + 2>/dev/null || true
+find "$ROOT/cli/backend/node_modules" -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true
+# Remove markdown/changelog from all modules
+find "$ROOT/cli/backend/node_modules" "$ROOT/cli/frontend/node_modules" \
+  -maxdepth 3 \( -name "*.md" -o -name "CHANGELOG*" -o -name "LICENSE*" -o -name ".eslintrc*" -o -name ".npmignore" \) \
+  -delete 2>/dev/null || true
+
+# 7. Check sizes
 echo ""
 echo "  Package contents:"
 du -sh "$ROOT/cli/dist" "$ROOT/cli/backend" "$ROOT/cli/frontend"

@@ -17,31 +17,58 @@ const router = Router();
 
 router.get("/agents", async (req: Request, res: Response) => {
   const statusFilter = (req.query.status as string) || "active";
-  const agents = db.prepare("SELECT * FROM agents ORDER BY lastHeartbeat DESC").all() as any[];
 
-  // Derive agent status from their sessions
   try {
+    // Derive agents entirely from JSONL session data (no daemon required)
     const allSessions = await listSessions();
     const now = Date.now();
     const ACTIVE_THRESHOLD_MS = 5 * 60 * 1000;
 
-    for (const agent of agents) {
-      const agentSessions = allSessions.filter((s) => s.agentId === agent.id || s.agentId === agent.name);
-      const hasActiveSessions = agentSessions.some(
-        (s) => now - new Date(s.lastActivityAt).getTime() < ACTIVE_THRESHOLD_MS
-      );
-      agent.status = hasActiveSessions ? "active" : "idle";
+    // Group sessions by agentId
+    const agentMap = new Map<string, any>();
+    for (const session of allSessions) {
+      if (!agentMap.has(session.agentId)) {
+        agentMap.set(session.agentId, {
+          id: session.agentId,
+          name: session.agentId,
+          host: "local",
+          status: "idle",
+          lastHeartbeat: session.lastActivityAt,
+          createdAt: session.startedAt,
+          costUsd: 0,
+          tokenCount: 0,
+          errorCount: 0,
+          sessionCount: 0,
+        });
+      }
+      const agent = agentMap.get(session.agentId)!;
+      agent.costUsd += session.costUsd;
+      agent.tokenCount += session.tokenCount;
+      agent.sessionCount += 1;
+      if (session.lastActivityAt > agent.lastHeartbeat) {
+        agent.lastHeartbeat = session.lastActivityAt;
+      }
+      if (session.startedAt < agent.createdAt) {
+        agent.createdAt = session.startedAt;
+      }
+      // Active if any session has recent activity
+      if (now - new Date(session.lastActivityAt).getTime() < ACTIVE_THRESHOLD_MS) {
+        agent.status = "active";
+      }
     }
-  } catch {
-    // If session parsing fails, keep DB statuses
+
+    const agents = Array.from(agentMap.values())
+      .sort((a, b) => b.costUsd - a.costUsd);
+
+    // Filter by status
+    const filtered = statusFilter === "all"
+      ? agents
+      : agents.filter((a: any) => a.status === statusFilter);
+
+    res.json({ agents: filtered });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to list agents" });
   }
-
-  // Filter by status
-  const filtered = statusFilter === "all"
-    ? agents
-    : agents.filter((a: any) => a.status === statusFilter);
-
-  res.json({ agents: filtered });
 });
 
 router.get("/agents/:id", (req: Request, res: Response) => {

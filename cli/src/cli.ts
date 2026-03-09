@@ -87,7 +87,7 @@ function autoInit(): ClaWatchConfig {
 program
   .command('start', { isDefault: true })
   .description('Start ClaWatch: backend + monitoring + dashboard')
-  .option('-p, --port <port>', 'Dashboard port', '3001')
+  .option('-p, --port <port>', 'Dashboard port', '3456')
   .option('--no-open', 'Don\'t open browser')
   .action(async (opts) => {
     console.log(chalk.bold('\n🔍 ClaWatch — AI Agent Observability\n'));

@@ -60,10 +60,8 @@ rm -rf "$ROOT/cli/frontend/node_modules/typescript"
 # Frontend: remove @img (sharp image processing, not needed)  
 rm -rf "$ROOT/cli/frontend/node_modules/@img"
 
-# Backend: remove es-abstract (10MB, unused runtime dep from transitive)
-rm -rf "$ROOT/cli/backend/node_modules/es-abstract"
-# Backend: remove lodash (5MB, can be replaced)
-rm -rf "$ROOT/cli/backend/node_modules/lodash"
+# Backend: remove lodash if not needed
+# NOTE: do NOT remove es-abstract — required by node-telegram-bot-api
 # Backend: strip better-sqlite3 docs (keep build + lib + source for rebuild)
 rm -rf "$ROOT/cli/backend/node_modules/better-sqlite3/docs"
 # Backend: remove test/example dirs

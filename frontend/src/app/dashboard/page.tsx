@@ -29,6 +29,8 @@ function formatTokens(n: number): string {
 
 const statusConfig: Record<AgentStatus, { color: string; dot: string; label: string }> = {
   running: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Running" },
+  active: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Active" },
+  idle: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Idle" },
   paused: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400", label: "Paused" },
   stopped: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Stopped" },
   error: { color: "bg-red-500/10 text-red-400 border-red-500/20", dot: "bg-red-400", label: "Error" },
@@ -102,7 +104,7 @@ export default function DashboardPage() {
 
   const unackedAlerts = alerts.filter((a) => !a.acknowledged);
   const criticalAlerts = unackedAlerts.filter((a) => a.severity === "critical" || a.severity === "warning");
-  const runningCount = agents.filter((a) => a.status === "running").length;
+  const runningCount = agents.filter((a) => a.status === "running" || a.status === "active").length;
   const totalCost = costs?.totalUsd ?? 0;
 
   async function handlePauseResume(agent: Agent) {
@@ -289,7 +291,7 @@ export default function DashboardPage() {
               </div>
               <div className="grid gap-3">
                 {agents.map((agent) => {
-                  const sc = statusConfig[agent.status];
+                  const sc = statusConfig[agent.status] || statusConfig.idle;
                   return (
                     <div
                       key={agent.id}

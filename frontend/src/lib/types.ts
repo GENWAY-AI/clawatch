@@ -1,4 +1,4 @@
-export type AgentStatus = "running" | "paused" | "stopped" | "error" | "stuck";
+export type AgentStatus = "running" | "active" | "idle" | "paused" | "stopped" | "error" | "stuck";
 
 export type AlertType = "stuck" | "error" | "cost_spike" | "loop_detected";
 

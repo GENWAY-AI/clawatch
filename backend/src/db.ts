@@ -1,0 +1,52 @@
+import Database from "better-sqlite3";
+import path from "path";
+
+const DB_PATH = path.join(__dirname, "..", "clawatch.db");
+
+const db: InstanceType<typeof Database> = new Database(DB_PATH);
+
+// Enable WAL mode for better concurrent read performance
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+
+export function initDb(): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agents (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      host TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'running',
+      lastHeartbeat TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      costUsd REAL NOT NULL DEFAULT 0,
+      tokenCount INTEGER NOT NULL DEFAULT 0,
+      errorCount INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agentId TEXT NOT NULL,
+      type TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      data TEXT NOT NULL DEFAULT '{}',
+      FOREIGN KEY (agentId) REFERENCES agents(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS alerts (
+      id TEXT PRIMARY KEY,
+      agentId TEXT NOT NULL,
+      type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'warning',
+      message TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      acknowledged INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_events_agentId ON events(agentId);
+    CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+    CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp);
+  `);
+}
+
+export default db;

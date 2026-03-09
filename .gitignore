@@ -1,4 +1,9 @@
-backend/
-frontend/
-*.db*
 node_modules/
+dist/
+.next/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+*.pid

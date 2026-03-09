@@ -1,0 +1,150 @@
+import { Agent, Alert, CostData } from "./types";
+
+const now = new Date();
+const minutesAgo = (m: number) => new Date(now.getTime() - m * 60000).toISOString();
+const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600000).toISOString();
+
+export const mockAgents: Agent[] = [
+  {
+    id: "agent-1",
+    name: "code-reviewer",
+    host: "prod-us-east-1",
+    status: "running",
+    lastHeartbeat: minutesAgo(0.5),
+    costUsd: 4.82,
+    tokenCount: 1_240_000,
+    errorCount: 0,
+  },
+  {
+    id: "agent-2",
+    name: "deploy-bot",
+    host: "prod-us-east-1",
+    status: "running",
+    lastHeartbeat: minutesAgo(1),
+    costUsd: 2.15,
+    tokenCount: 520_000,
+    errorCount: 1,
+  },
+  {
+    id: "agent-3",
+    name: "data-pipeline",
+    host: "prod-eu-west-1",
+    status: "error",
+    lastHeartbeat: minutesAgo(12),
+    costUsd: 8.43,
+    tokenCount: 2_100_000,
+    errorCount: 7,
+  },
+  {
+    id: "agent-4",
+    name: "customer-support",
+    host: "prod-us-west-2",
+    status: "stuck",
+    lastHeartbeat: minutesAgo(45),
+    costUsd: 12.67,
+    tokenCount: 3_400_000,
+    errorCount: 3,
+  },
+  {
+    id: "agent-5",
+    name: "test-runner",
+    host: "staging-1",
+    status: "paused",
+    lastHeartbeat: hoursAgo(2),
+    costUsd: 1.03,
+    tokenCount: 280_000,
+    errorCount: 0,
+  },
+  {
+    id: "agent-6",
+    name: "doc-generator",
+    host: "prod-us-east-1",
+    status: "running",
+    lastHeartbeat: minutesAgo(0.2),
+    costUsd: 3.21,
+    tokenCount: 890_000,
+    errorCount: 0,
+  },
+  {
+    id: "agent-7",
+    name: "security-scanner",
+    host: "prod-eu-west-1",
+    status: "stopped",
+    lastHeartbeat: hoursAgo(6),
+    costUsd: 0.45,
+    tokenCount: 120_000,
+    errorCount: 0,
+  },
+  {
+    id: "agent-8",
+    name: "slack-responder",
+    host: "prod-us-west-2",
+    status: "running",
+    lastHeartbeat: minutesAgo(0.1),
+    costUsd: 6.89,
+    tokenCount: 1_780_000,
+    errorCount: 2,
+  },
+];
+
+export const mockAlerts: Alert[] = [
+  {
+    id: "alert-1",
+    agentId: "agent-4",
+    type: "stuck",
+    severity: "critical",
+    message: "customer-support has not sent a heartbeat in 45 minutes",
+    timestamp: minutesAgo(44),
+    acknowledged: false,
+  },
+  {
+    id: "alert-2",
+    agentId: "agent-3",
+    type: "error",
+    severity: "critical",
+    message: "data-pipeline encountered 7 errors in the last hour",
+    timestamp: minutesAgo(10),
+    acknowledged: false,
+  },
+  {
+    id: "alert-3",
+    agentId: "agent-4",
+    type: "cost_spike",
+    severity: "warning",
+    message: "customer-support cost increased 340% in the last hour",
+    timestamp: hoursAgo(1),
+    acknowledged: false,
+  },
+  {
+    id: "alert-4",
+    agentId: "agent-8",
+    type: "loop_detected",
+    severity: "warning",
+    message: "slack-responder may be in a retry loop (similar outputs detected)",
+    timestamp: minutesAgo(30),
+    acknowledged: true,
+  },
+  {
+    id: "alert-5",
+    agentId: "agent-2",
+    type: "error",
+    severity: "info",
+    message: "deploy-bot encountered a transient API error (auto-recovered)",
+    timestamp: hoursAgo(3),
+    acknowledged: true,
+  },
+];
+
+export const mockCosts: CostData = {
+  totalUsd: 39.65,
+  byAgent: mockAgents.map((a) => ({
+    agentId: a.id,
+    name: a.name,
+    costUsd: a.costUsd,
+  })),
+  byModel: [
+    { model: "claude-sonnet-4-20250514", costUsd: 22.1 },
+    { model: "claude-haiku-4-20250506", costUsd: 11.35 },
+    { model: "gpt-4o", costUsd: 6.2 },
+  ],
+};

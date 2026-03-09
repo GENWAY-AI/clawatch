@@ -1,0 +1,23 @@
+{
+  "name": "clawatch-cli",
+  "version": "1.0.0",
+  "description": "ClaWatch CLI collection agent - monitors OpenClaw agents and reports to ClaWatch backend",
+  "main": "dist/cli.js",
+  "bin": {
+    "clawatch": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "chokidar": "^3.6.0",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,7 +1,14 @@
 import Database from "better-sqlite3";
 import path from "path";
+import os from "os";
+import fs from "fs";
 
-const DB_PATH = path.join(__dirname, "..", "clawatch.db");
+// Store DB in ~/.clawatch/ so it persists across npm upgrades
+const CLAWATCH_DIR = path.join(os.homedir(), ".clawatch");
+if (!fs.existsSync(CLAWATCH_DIR)) {
+  fs.mkdirSync(CLAWATCH_DIR, { recursive: true });
+}
+const DB_PATH = path.join(CLAWATCH_DIR, "clawatch.db");
 
 const db: InstanceType<typeof Database> = new Database(DB_PATH);
 

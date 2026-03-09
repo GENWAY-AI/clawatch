@@ -251,7 +251,7 @@ export default function LandingPage() {
             <span className="text-emerald-400">&#10095;</span> Quick Start
           </h2>
           <p className="text-gray-400 mb-12 text-lg">Up and running in under 60 seconds.</p>
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
             {/* Step 1 */}
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
               <div className="text-emerald-400 text-sm font-mono mb-3">Step 1</div>
@@ -265,23 +265,13 @@ export default function LandingPage() {
             {/* Step 2 */}
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
               <div className="text-emerald-400 text-sm font-mono mb-3">Step 2</div>
-              <h3 className="text-lg font-semibold mb-2">Initialize</h3>
-              <p className="text-gray-400 text-sm mb-4">Auto-detects your ~/.openclaw directory.</p>
-              <TerminalBlock copyText="clawatch init">
-                <div><span className="text-emerald-400">$</span> <span className="text-gray-300">clawatch init</span></div>
-                <div className="text-gray-500 mt-1">Scanning ~/.openclaw...</div>
-                <div className="text-emerald-400 mt-0.5">&#10003; Found 12 agents, 130 sessions</div>
-              </TerminalBlock>
-            </div>
-            {/* Step 3 */}
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
-              <div className="text-emerald-400 text-sm font-mono mb-3">Step 3</div>
               <h3 className="text-lg font-semibold mb-2">Start</h3>
-              <p className="text-gray-400 text-sm mb-4">Starts the daemon and opens the dashboard.</p>
+              <p className="text-gray-400 text-sm mb-4">Auto-detects agents, starts monitoring, opens dashboard.</p>
               <TerminalBlock copyText="clawatch start">
                 <div><span className="text-emerald-400">$</span> <span className="text-gray-300">clawatch start</span></div>
-                <div className="text-emerald-400 mt-1">&#10003; Daemon running on port 3002</div>
-                <div className="text-gray-500 mt-0.5">Dashboard → localhost:3002</div>
+                <div className="text-gray-500 mt-1">Scanning ~/.openclaw...</div>
+                <div className="text-emerald-400 mt-0.5">&#10003; Found 12 agents, 130 sessions</div>
+                <div className="text-emerald-400 mt-0.5">&#10003; Dashboard → localhost:3001</div>
               </TerminalBlock>
             </div>
           </div>

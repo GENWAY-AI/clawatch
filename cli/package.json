@@ -1,6 +1,6 @@
 {
   "name": "clawatch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Observability & monitoring for AI agents. Track costs, tokens, sessions, and get alerts when things go wrong.",
   "author": "GENWAY AI <hello@genway.ai>",
   "license": "MIT",

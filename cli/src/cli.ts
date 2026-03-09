@@ -13,7 +13,7 @@ const program = new Command();
 program
   .name('clawatch')
   .description('ClaWatch — AI Agent Observability. One command to monitor all your agents.')
-  .version('1.0.1');
+  .version('1.0.2');
 
 // --- Helper: find backend dir relative to CLI ---
 function findBackendDir(): string {

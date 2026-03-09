@@ -8,12 +8,15 @@ import * as os from 'os';
 import { fork, spawn, ChildProcess } from 'child_process';
 import { loadConfig, saveConfig, configExists, paths, ensureDir, ClaWatchConfig } from './config';
 
+// SSOT: read version from package.json
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+
 const program = new Command();
 
 program
   .name('clawatch')
   .description('ClaWatch — AI Agent Observability. One command to monitor all your agents.')
-  .version('1.0.2');
+  .version(pkg.version);
 
 // --- Helper: find backend dir relative to CLI ---
 function findBackendDir(): string {

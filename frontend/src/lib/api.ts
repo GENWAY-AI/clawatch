@@ -17,10 +17,11 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export async function getAgents(): Promise<Agent[]> {
+export async function getAgents(status?: string): Promise<Agent[]> {
   if (USE_MOCK) return mockAgents;
   try {
-    const data = await fetchJson<{ agents: Agent[] }>("/api/agents");
+    const qs = status ? `?status=${status}` : "";
+    const data = await fetchJson<{ agents: Agent[] }>(`/api/agents${qs}`);
     return data.agents;
   } catch {
     console.warn("API unreachable, falling back to mock data");

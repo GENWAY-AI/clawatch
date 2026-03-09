@@ -75,7 +75,15 @@ export default function DashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [a, al, c, s, p] = await Promise.all([getAgents(), getAlerts(), getCosts(), getSessions(), getProjects()]);
+      const agentStatus = showIdleAgents ? "all" : undefined;
+      const sessStatus = sessionFilter === "all" ? "all" : sessionFilter === "active" ? undefined : sessionFilter;
+      const [a, al, c, s, p] = await Promise.all([
+        getAgents(agentStatus),
+        getAlerts(),
+        getCosts(),
+        getSessions(undefined, sessStatus, sessionSort),
+        getProjects(),
+      ]);
       setAgents(a);
       setAlerts(al);
       setCosts(c);
@@ -84,7 +92,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showIdleAgents, sessionFilter, sessionSort]);
 
   useEffect(() => {
     fetchData();
@@ -94,18 +102,8 @@ export default function DashboardPage() {
 
   const unackedAlerts = alerts.filter((a) => !a.acknowledged);
   const criticalAlerts = unackedAlerts.filter((a) => a.severity === "critical" || a.severity === "warning");
-  const activeAgents = agents.filter((a) => a.status === "running" || a.status === "error");
-  const runningCount = activeAgents.length;
+  const runningCount = agents.filter((a) => a.status === "running").length;
   const totalCost = costs?.totalUsd ?? 0;
-  const filteredAgents = showIdleAgents ? agents : activeAgents;
-
-  const filteredSessions = sessions
-    .filter((s) => sessionFilter === "all" || s.status === sessionFilter)
-    .sort((a, b) => {
-      if (sessionSort === "cost") return b.costUsd - a.costUsd;
-      if (sessionSort === "tokens") return b.tokenCount - a.tokenCount;
-      return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
-    });
 
   async function handlePauseResume(agent: Agent) {
     if (agent.status === "running") {
@@ -286,11 +284,11 @@ export default function DashboardPage() {
                     onChange={(e) => setShowIdleAgents(e.target.checked)}
                     className="rounded border-border bg-muted accent-emerald-500"
                   />
-                  Show idle agents ({agents.length - activeAgents.length})
+                  Show idle agents
                 </label>
               </div>
               <div className="grid gap-3">
-                {filteredAgents.map((agent) => {
+                {agents.map((agent) => {
                   const sc = statusConfig[agent.status];
                   return (
                     <div
@@ -497,7 +495,7 @@ export default function DashboardPage() {
 
             {/* Session Cards */}
             <div className="grid gap-3">
-              {filteredSessions.map((session) => {
+              {sessions.map((session) => {
                 const sc = sessionStatusConfig[session.status];
                 return (
                   <div
@@ -543,7 +541,7 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
-              {filteredSessions.length === 0 && (
+              {sessions.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground text-sm">
                   No sessions found for the selected filter.
                 </div>

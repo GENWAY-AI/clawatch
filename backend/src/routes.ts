@@ -2,6 +2,14 @@ import { Router, Request, Response } from "express";
 import { v4 as uuid } from "uuid";
 import db from "./db";
 import { listSessions, getSessionDetail } from "./sessions";
+import {
+  createProject,
+  listProjects,
+  getProjectDetail,
+  addSessionToProject,
+  removeSessionFromProject,
+  suggestRelatedSessions,
+} from "./projects";
 
 const router = Router();
 
@@ -228,6 +236,70 @@ router.get("/sessions/:id", async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to get session detail" });
   }
+});
+
+// ---------- Session Suggestions ----------
+
+router.get("/sessions/:id/suggestions", async (req: Request, res: Response) => {
+  try {
+    const suggestions = await suggestRelatedSessions(req.params.id);
+    res.json({ suggestions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to get suggestions" });
+  }
+});
+
+// ---------- Projects ----------
+
+router.post("/projects", (req: Request, res: Response) => {
+  const { name, description } = req.body;
+  if (!name) {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+  const project = createProject(name, description);
+  res.status(201).json(project);
+});
+
+router.get("/projects", (_req: Request, res: Response) => {
+  const projects = listProjects();
+  res.json({ projects });
+});
+
+router.get("/projects/:id", async (req: Request, res: Response) => {
+  try {
+    const detail = await getProjectDetail(req.params.id);
+    if (!detail) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    res.json(detail);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to get project detail" });
+  }
+});
+
+router.post("/projects/:id/sessions", (req: Request, res: Response) => {
+  const { sessionId } = req.body;
+  if (!sessionId) {
+    res.status(400).json({ error: "sessionId is required" });
+    return;
+  }
+  const ok = addSessionToProject(req.params.id, sessionId);
+  if (!ok) {
+    res.status(400).json({ error: "Failed to add session" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+router.delete("/projects/:id/sessions/:sessionId", (req: Request, res: Response) => {
+  const ok = removeSessionFromProject(req.params.id, req.params.sessionId);
+  if (!ok) {
+    res.status(404).json({ error: "Session not found in project" });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 export default router;

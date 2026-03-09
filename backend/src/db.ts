@@ -9,7 +9,8 @@ const db: InstanceType<typeof Database> = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
-export function initDb(): void {
+// Auto-init tables immediately (before any imports that call db.prepare)
+function initDb(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
@@ -65,4 +66,8 @@ export function initDb(): void {
   `);
 }
 
+// Run immediately so tables exist before other modules call db.prepare()
+initDb();
+
+export { initDb };
 export default db;

@@ -65,8 +65,9 @@ export default function DashboardPage() {
   const [costs, setCosts] = useState<CostData | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [sessionFilter, setSessionFilter] = useState<SessionFilter>("all");
+  const [sessionFilter, setSessionFilter] = useState<SessionFilter>("active");
   const [sessionSort, setSessionSort] = useState<SessionSort>("recent");
+  const [showIdleAgents, setShowIdleAgents] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -93,8 +94,10 @@ export default function DashboardPage() {
 
   const unackedAlerts = alerts.filter((a) => !a.acknowledged);
   const criticalAlerts = unackedAlerts.filter((a) => a.severity === "critical" || a.severity === "warning");
-  const runningCount = agents.filter((a) => a.status === "running").length;
+  const activeAgents = agents.filter((a) => a.status === "running" || a.status === "error");
+  const runningCount = activeAgents.length;
   const totalCost = costs?.totalUsd ?? 0;
+  const filteredAgents = showIdleAgents ? agents : activeAgents;
 
   const filteredSessions = sessions
     .filter((s) => sessionFilter === "all" || s.status === sessionFilter)
@@ -274,9 +277,20 @@ export default function DashboardPage() {
           <>
             {/* Agent List */}
             <div>
-              <h2 className="text-lg font-semibold mb-4">Agents</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Agents</h2>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showIdleAgents}
+                    onChange={(e) => setShowIdleAgents(e.target.checked)}
+                    className="rounded border-border bg-muted accent-emerald-500"
+                  />
+                  Show idle agents ({agents.length - activeAgents.length})
+                </label>
+              </div>
               <div className="grid gap-3">
-                {agents.map((agent) => {
+                {filteredAgents.map((agent) => {
                   const sc = statusConfig[agent.status];
                   return (
                     <div

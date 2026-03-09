@@ -15,9 +15,33 @@ const router = Router();
 
 // ---------- Agents ----------
 
-router.get("/agents", (_req: Request, res: Response) => {
-  const agents = db.prepare("SELECT * FROM agents ORDER BY lastHeartbeat DESC").all();
-  res.json({ agents });
+router.get("/agents", async (req: Request, res: Response) => {
+  const statusFilter = (req.query.status as string) || "active";
+  const agents = db.prepare("SELECT * FROM agents ORDER BY lastHeartbeat DESC").all() as any[];
+
+  // Derive agent status from their sessions
+  try {
+    const allSessions = await listSessions();
+    const now = Date.now();
+    const ACTIVE_THRESHOLD_MS = 5 * 60 * 1000;
+
+    for (const agent of agents) {
+      const agentSessions = allSessions.filter((s) => s.agentId === agent.id || s.agentId === agent.name);
+      const hasActiveSessions = agentSessions.some(
+        (s) => now - new Date(s.lastActivityAt).getTime() < ACTIVE_THRESHOLD_MS
+      );
+      agent.status = hasActiveSessions ? "active" : "idle";
+    }
+  } catch {
+    // If session parsing fails, keep DB statuses
+  }
+
+  // Filter by status
+  const filtered = statusFilter === "all"
+    ? agents
+    : agents.filter((a: any) => a.status === statusFilter);
+
+  res.json({ agents: filtered });
 });
 
 router.get("/agents/:id", (req: Request, res: Response) => {
@@ -200,9 +224,10 @@ router.get("/sessions", async (req: Request, res: Response) => {
       sessions = sessions.filter((s) => s.agentId === agentId);
     }
 
-    // Filter by status
-    if (status && typeof status === "string") {
-      const statuses = status.split(",");
+    // Filter by status — default to "active" if not specified
+    const statusFilter = (status as string) || "active";
+    if (statusFilter !== "all") {
+      const statuses = statusFilter.split(",");
       sessions = sessions.filter((s) => statuses.includes(s.status));
     }
 

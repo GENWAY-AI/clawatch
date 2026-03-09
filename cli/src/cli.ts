@@ -9,8 +9,28 @@ import { fork, spawn, ChildProcess } from 'child_process';
 import { loadConfig, saveConfig, configExists, paths, ensureDir, ClaWatchConfig } from './config';
 import { execSync } from 'child_process';
 
+import * as net from 'net';
+
 // SSOT: read version from package.json
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+
+// --- Helper: find a free port starting from preferred ---
+function findFreePort(preferred: number): Promise<number> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.listen(preferred, () => {
+      server.close(() => resolve(preferred));
+    });
+    server.on('error', () => {
+      // Port taken, try next
+      const next = net.createServer();
+      next.listen(0, () => {
+        const port = (next.address() as net.AddressInfo).port;
+        next.close(() => resolve(port));
+      });
+    });
+  });
+}
 
 // --- Helper: ensure better-sqlite3 native addon is built ---
 function ensureNativeAddon(backendDir: string): void {
@@ -125,8 +145,21 @@ program
     const config = loadConfig();
     const port = opts.port || '3001';
 
-    const BACKEND_PORT = '3001';
-    const FRONTEND_PORT = port;
+    const preferredBackend = 3001;
+    const preferredFrontend = parseInt(port, 10) || 3456;
+
+    const backendPort = await findFreePort(preferredBackend);
+    const frontendPort = await findFreePort(preferredFrontend === backendPort ? preferredFrontend + 1 : preferredFrontend);
+
+    if (backendPort !== preferredBackend) {
+      console.log(chalk.yellow(`  Port ${preferredBackend} in use, using ${backendPort} for API`));
+    }
+    if (frontendPort !== preferredFrontend) {
+      console.log(chalk.yellow(`  Port ${preferredFrontend} in use, using ${frontendPort} for dashboard`));
+    }
+
+    const BACKEND_PORT = String(backendPort);
+    const FRONTEND_PORT = String(frontendPort);
 
     // 1. Start backend server (API)
     const backendDir = findDir('backend');

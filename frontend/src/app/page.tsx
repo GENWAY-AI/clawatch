@@ -107,8 +107,7 @@ const features = [
 ];
 
 const cliCommands = [
-  { cmd: 'clawatch init', desc: 'Auto-detect OpenClaw sessions and configure monitoring' },
-  { cmd: 'clawatch start', desc: 'Start the monitoring daemon and open the dashboard' },
+  { cmd: 'clawatch start', desc: 'Auto-detect agents, start monitoring, and open the dashboard' },
   { cmd: 'clawatch stop', desc: 'Stop the monitoring daemon gracefully' },
   { cmd: 'clawatch status', desc: 'Show active agents, sessions, and daemon health' },
   { cmd: 'clawatch logs', desc: 'Stream real-time logs from the monitoring daemon' },
@@ -127,7 +126,7 @@ const channels = [
 const faqs = [
   { q: 'What is ClaWatch?', a: 'ClaWatch is an open source observability platform for AI agents. It monitors your OpenClaw agents in real-time, tracking heartbeats, token usage, costs, and errors.' },
   { q: 'Is it free?', a: 'Yes. ClaWatch is MIT licensed and free forever. You can self-host it or use our managed service.' },
-  { q: 'How do I install?', a: 'Run npm install -g clawatch in your terminal. That\'s it. Then run clawatch init to auto-detect your OpenClaw sessions.' },
+  { q: 'How do I install?', a: 'Run npm install -g clawatch in your terminal. Then run clawatch start — it auto-detects your OpenClaw agents and opens the dashboard.' },
   { q: 'What data does it collect?', a: 'Agent heartbeats, token usage, costs, and errors from OpenClaw session files. Everything stays local on your machine by default.' },
   { q: 'Does it work with other agent frameworks?', a: 'Currently ClaWatch supports OpenClaw. Support for additional agent frameworks is coming soon.' },
   { q: 'Where is my data stored?', a: 'Locally on your machine. Nothing leaves your network unless you explicitly opt-in to managed hosting.' },
@@ -235,12 +234,11 @@ export default function LandingPage() {
             </a>
           </div>
           <div className="max-w-2xl mx-auto">
-            <TerminalBlock copyText="npm install -g clawatch && clawatch init && clawatch start">
+            <TerminalBlock copyText="npm install -g clawatch && clawatch start">
               <div><span className="text-emerald-400">$</span> <span className="text-gray-300">npm install -g clawatch</span></div>
-              <div className="mt-1"><span className="text-emerald-400">$</span> <span className="text-gray-300">clawatch init</span></div>
-              <div className="text-emerald-400 mt-0.5">&#10003; Found 12 agents, 130 sessions</div>
               <div className="mt-1"><span className="text-emerald-400">$</span> <span className="text-gray-300">clawatch start</span></div>
-              <div className="text-emerald-400 mt-0.5">&#10003; Monitoring started. Dashboard → http://localhost:3002</div>
+              <div className="text-emerald-400 mt-0.5">&#10003; Found 12 agents, 130 sessions</div>
+              <div className="text-emerald-400 mt-0.5">&#10003; Monitoring started. Dashboard → http://localhost:3001</div>
             </TerminalBlock>
           </div>
         </div>

@@ -9,13 +9,10 @@ Real-time visibility, alerting, cost tracking, and the ability to pause or appro
 ## Quick Start
 
 ```bash
-# Install the CLI
+# Install
 npm install -g clawatch
 
-# Initialize (auto-detects your OpenClaw setup)
-clawatch init
-
-# Start monitoring
+# Start everything (auto-configures on first run)
 clawatch start
 ```
 
@@ -58,7 +55,7 @@ clawatch/
 
 | Command | Description |
 |---------|-------------|
-| `clawatch init` | Detect OpenClaw setup, create config |
+| `clawatch start` | Start everything (auto-init on first run) |
 | `clawatch start` | Start monitoring daemon |
 | `clawatch stop` | Stop the daemon |
 | `clawatch status` | Show agent count, session stats |

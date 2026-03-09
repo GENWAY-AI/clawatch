@@ -13,20 +13,18 @@ npm install -g clawatch
 ## Quick Start
 
 ```bash
-# Detect agents and configure
-clawatch init
-
-# Start monitoring daemon
+npm install -g clawatch
 clawatch start
+```
 
-# Check status
-clawatch status
+That's it! ClaWatch auto-detects your OpenClaw agents, starts the backend, opens the dashboard, and begins monitoring.
 
-# View logs
-clawatch logs
+### Other commands
 
-# Stop monitoring
-clawatch stop
+```bash
+clawatch status   # Check what's running
+clawatch stop     # Stop the daemon
+clawatch logs     # Tail daemon logs
 ```
 
 ## What It Monitors

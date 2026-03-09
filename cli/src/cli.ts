@@ -233,39 +233,11 @@ program
 
 program
   .command('init')
-  .description('Initialize ClaWatch configuration')
-  .option('--backend <url>', 'Backend URL', 'http://localhost:3001')
-  .action((opts) => {
-    const openclawDir = path.join(os.homedir(), '.openclaw');
-
-    if (!fs.existsSync(openclawDir)) {
-      console.log(chalk.red(`OpenClaw directory not found: ${openclawDir}`));
-      process.exit(1);
-    }
-
-    const agentsDir = path.join(openclawDir, 'agents');
-    const agents = fs.existsSync(agentsDir)
-      ? fs.readdirSync(agentsDir).filter((name) => {
-          const sessionsDir = path.join(agentsDir, name, 'sessions');
-          return fs.existsSync(sessionsDir);
-        })
-      : [];
-
-    const config: ClaWatchConfig = {
-      openclawDir,
-      backendUrl: opts.backend,
-      apiKey: '',
-      scanIntervalMs: 60000,
-    };
-
-    ensureDir();
-    saveConfig(config);
-
-    console.log(chalk.green('ClaWatch initialized!'));
-    console.log(`  Config: ${paths.config}`);
-    console.log(`  OpenClaw: ${openclawDir}`);
-    console.log(`  Backend: ${config.backendUrl}`);
-    console.log(`  Agents found: ${agents.length} (${agents.join(', ')})`);
+  .description('[deprecated] Initialization is now automatic on start')
+  .action(() => {
+    console.log(chalk.yellow('Note: "clawatch init" is deprecated. Just run "clawatch start" — it auto-initializes.'));
+    autoInit();
+    console.log(chalk.green('Config created.'));
   });
 
 // 'start' is the default command (see above) — no separate start needed

@@ -56,16 +56,15 @@ program
   .description('ClaWatch — AI Agent Observability. One command to monitor all your agents.')
   .version(pkg.version);
 
-// --- Helper: find backend dir relative to CLI ---
-function findBackendDir(): string {
-  // When installed via npm, backend is sibling to cli
+// --- Helper: find dirs relative to CLI ---
+function findDir(name: string): string {
   const candidates = [
-    path.join(__dirname, '..', '..', 'backend'),          // dev: cli/dist/../backend
-    path.join(__dirname, '..', '..', '..', 'backend'),    // npm global: node_modules/clawatch/../backend
-    path.join(__dirname, '..', 'backend'),                 // bundled
+    path.join(__dirname, '..', name),                      // bundled: cli/backend or cli/frontend
+    path.join(__dirname, '..', '..', name),                // dev: cli/dist/../../backend
+    path.join(__dirname, '..', '..', '..', name),          // npm global
   ];
   for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    if (fs.existsSync(dir)) return dir;
   }
   return '';
 }
@@ -126,30 +125,30 @@ program
     const config = loadConfig();
     const port = opts.port || '3001';
 
-    // 1. Start backend server
-    const backendDir = findBackendDir();
+    const BACKEND_PORT = '3001';
+    const FRONTEND_PORT = port;
+
+    // 1. Start backend server (API)
+    const backendDir = findDir('backend');
     let backendProcess: ChildProcess | null = null;
 
     if (backendDir) {
-      // Ensure native SQLite addon is compiled for this machine
       ensureNativeAddon(backendDir);
-      console.log(chalk.blue('Starting backend server...'));
+      console.log(chalk.blue('Starting backend API...'));
 
-      // Check if tsx or ts-node is available, otherwise use compiled JS
       const distIndex = path.join(backendDir, 'dist', 'index.js');
       const srcIndex = path.join(backendDir, 'src', 'index.ts');
 
       if (fs.existsSync(distIndex)) {
         backendProcess = spawn('node', [distIndex], {
           cwd: backendDir,
-          env: { ...process.env, PORT: port },
+          env: { ...process.env, PORT: BACKEND_PORT },
           stdio: ['ignore', 'pipe', 'pipe'],
         });
       } else {
-        // Try tsx for dev mode
         backendProcess = spawn('npx', ['tsx', srcIndex], {
           cwd: backendDir,
-          env: { ...process.env, PORT: port },
+          env: { ...process.env, PORT: BACKEND_PORT },
           stdio: ['ignore', 'pipe', 'pipe'],
           shell: true,
         });
@@ -157,17 +156,46 @@ program
 
       backendProcess.stdout?.on('data', (d: Buffer) => {
         const line = d.toString().trim();
-        if (line) console.log(chalk.gray(`  [server] ${line}`));
+        if (line) console.log(chalk.gray(`  [api] ${line}`));
       });
       backendProcess.stderr?.on('data', (d: Buffer) => {
         const line = d.toString().trim();
-        if (line && !line.includes('ExperimentalWarning')) console.log(chalk.red(`  [server] ${line}`));
+        if (line && !line.includes('ExperimentalWarning')) console.log(chalk.red(`  [api] ${line}`));
       });
     } else {
-      console.log(chalk.yellow('Backend not found locally — using configured URL: ' + config.backendUrl));
+      console.log(chalk.yellow('Backend not found — using configured URL: ' + config.backendUrl));
     }
 
-    // 2. Start monitoring daemon (inline, not forked)
+    // 2. Start frontend (Next.js standalone)
+    const frontendDir = findDir('frontend');
+    let frontendProcess: ChildProcess | null = null;
+
+    if (frontendDir) {
+      const serverJs = path.join(frontendDir, 'server.js');
+      if (fs.existsSync(serverJs)) {
+        console.log(chalk.blue('Starting dashboard...'));
+        frontendProcess = spawn('node', [serverJs], {
+          cwd: frontendDir,
+          env: {
+            ...process.env,
+            PORT: FRONTEND_PORT,
+            HOSTNAME: '0.0.0.0',
+            BACKEND_URL: `http://localhost:${BACKEND_PORT}`,
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        frontendProcess.stdout?.on('data', (d: Buffer) => {
+          const line = d.toString().trim();
+          if (line) console.log(chalk.gray(`  [dashboard] ${line}`));
+        });
+        frontendProcess.stderr?.on('data', (d: Buffer) => {
+          const line = d.toString().trim();
+          if (line && !line.includes('ExperimentalWarning')) console.log(chalk.red(`  [dashboard] ${line}`));
+        });
+      }
+    }
+
+    // 3. Start monitoring daemon
     console.log(chalk.blue('Starting monitoring...'));
     const daemonPath = path.join(__dirname, 'daemon.js');
     if (fs.existsSync(daemonPath)) {
@@ -180,9 +208,9 @@ program
       });
     }
 
-    // 3. Wait for server to be ready, then open browser
-    const dashUrl = `http://localhost:${port}`;
-    console.log(chalk.blue(`\nWaiting for server...`));
+    // 4. Wait for dashboard to be ready, then open browser
+    const dashUrl = `http://localhost:${FRONTEND_PORT}`;
+    console.log(chalk.blue(`\nWaiting for dashboard...`));
 
     let ready = false;
     for (let i = 0; i < 20; i++) {
@@ -206,7 +234,7 @@ program
     if (ready) {
       console.log(chalk.green.bold(`\n✅ ClaWatch is running!`));
       console.log(chalk.green(`   Dashboard: ${dashUrl}`));
-      console.log(chalk.gray(`   API:       ${dashUrl}/api/agents`));
+      console.log(chalk.gray(`   API:       http://localhost:${BACKEND_PORT}/api/agents`));
       console.log(chalk.gray(`\n   Press Ctrl+C to stop\n`));
 
       if (opts.open !== false) {
@@ -223,10 +251,12 @@ program
     process.on('SIGINT', () => {
       console.log(chalk.yellow('\nShutting down...'));
       if (backendProcess) backendProcess.kill();
+      if (frontendProcess) frontendProcess.kill();
       process.exit(0);
     });
     process.on('SIGTERM', () => {
       if (backendProcess) backendProcess.kill();
+      if (frontendProcess) frontendProcess.kill();
       process.exit(0);
     });
   });

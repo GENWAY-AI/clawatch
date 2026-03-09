@@ -11,13 +11,18 @@ echo "  Building backend..."
 cd "$ROOT/backend"
 npx tsc
 
-# 2. Build CLI
+# 2. Build frontend (Next.js standalone)
+echo "  Building frontend..."
+cd "$ROOT/frontend"
+NEXT_PUBLIC_USE_MOCK="" npm run build
+
+# 3. Build CLI
 echo "  Building CLI..."
 cd "$ROOT/cli"
 npm run build
 
-# 3. Copy backend into CLI package
-echo "  Bundling backend into CLI..."
+# 4. Bundle backend into CLI
+echo "  Bundling backend..."
 rm -rf "$ROOT/cli/backend"
 mkdir -p "$ROOT/cli/backend/dist"
 mkdir -p "$ROOT/cli/backend/public"
@@ -25,22 +30,35 @@ cp -r "$ROOT/backend/dist/"* "$ROOT/cli/backend/dist/"
 cp -r "$ROOT/backend/public/"* "$ROOT/cli/backend/public/"
 cp "$ROOT/backend/package.json" "$ROOT/cli/backend/"
 
-# 4. Install backend prod dependencies into the bundle
-#    --ignore-scripts: skip native builds (will rebuild on user's machine at startup)
 echo "  Installing backend dependencies..."
 cd "$ROOT/cli/backend"
 npm install --omit=dev --ignore-scripts 2>/dev/null
 
-# 5. Include binding.gyp and source for rebuild on target machine
-echo "  Ensuring native build files are included..."
+# 5. Bundle frontend (Next.js standalone) into CLI
+echo "  Bundling frontend..."
+rm -rf "$ROOT/cli/frontend"
+mkdir -p "$ROOT/cli/frontend"
 
-# 5. Check size
+# Copy standalone server
+cp -r "$ROOT/frontend/.next/standalone/"* "$ROOT/cli/frontend/"
+
+# Copy static assets (required by standalone)
+mkdir -p "$ROOT/cli/frontend/.next/static"
+cp -r "$ROOT/frontend/.next/static/"* "$ROOT/cli/frontend/.next/static/"
+
+# Copy public assets if they exist
+if [ -d "$ROOT/frontend/public" ]; then
+  mkdir -p "$ROOT/cli/frontend/public"
+  cp -r "$ROOT/frontend/public/"* "$ROOT/cli/frontend/public/" 2>/dev/null || true
+fi
+
+# 6. Check sizes
 echo ""
 echo "  Package contents:"
-du -sh "$ROOT/cli/dist" "$ROOT/cli/backend"
+du -sh "$ROOT/cli/dist" "$ROOT/cli/backend" "$ROOT/cli/frontend"
 echo ""
 
-# 6. Dry run
+# 7. Dry run
 echo "  Running npm pack (dry run)..."
 cd "$ROOT/cli"
 npm pack --dry-run 2>&1 | tail -5

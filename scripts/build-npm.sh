@@ -39,18 +39,25 @@ echo "  Bundling frontend..."
 rm -rf "$ROOT/cli/frontend"
 mkdir -p "$ROOT/cli/frontend"
 
-# Copy standalone server
-cp -r "$ROOT/frontend/.next/standalone/"* "$ROOT/cli/frontend/"
+# Copy standalone server (includes server.js, node_modules, .next/server/)
+# Use rsync to include hidden dirs like .next/
+rsync -a "$ROOT/frontend/.next/standalone/" "$ROOT/cli/frontend/"
 
-# Copy static assets (required by standalone)
-mkdir -p "$ROOT/cli/frontend/.next/static"
-cp -r "$ROOT/frontend/.next/static/"* "$ROOT/cli/frontend/.next/static/"
+# Copy static assets INTO the existing .next dir
+cp -r "$ROOT/frontend/.next/static" "$ROOT/cli/frontend/.next/"
 
 # Copy public assets if they exist
 if [ -d "$ROOT/frontend/public" ]; then
-  mkdir -p "$ROOT/cli/frontend/public"
-  cp -r "$ROOT/frontend/public/"* "$ROOT/cli/frontend/public/" 2>/dev/null || true
+  cp -r "$ROOT/frontend/public" "$ROOT/cli/frontend/public"
 fi
+
+# Verify .next has everything
+echo "  Verifying frontend bundle..."
+for f in BUILD_ID server routes-manifest.json static; do
+  if [ ! -e "$ROOT/cli/frontend/.next/$f" ]; then
+    echo "  ⚠️  Missing .next/$f!"
+  fi
+done
 
 # 6. Strip bloat from node_modules
 echo "  Stripping unnecessary files..."

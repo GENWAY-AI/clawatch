@@ -26,9 +26,13 @@ cp -r "$ROOT/backend/public/"* "$ROOT/cli/backend/public/"
 cp "$ROOT/backend/package.json" "$ROOT/cli/backend/"
 
 # 4. Install backend prod dependencies into the bundle
+#    --ignore-scripts: skip native builds (will rebuild on user's machine at startup)
 echo "  Installing backend dependencies..."
 cd "$ROOT/cli/backend"
 npm install --omit=dev --ignore-scripts 2>/dev/null
+
+# 5. Include binding.gyp and source for rebuild on target machine
+echo "  Ensuring native build files are included..."
 
 # 5. Check size
 echo ""

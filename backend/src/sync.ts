@@ -128,17 +128,33 @@ class UnionFind {
 function countPatternInContent(sessionId: string, agentId: string, pattern: RegExp, maxBytes = 32768): number {
   const profiles = discoverProfiles();
   for (const profile of profiles) {
-    const filePath = path.join(profile.dir, "agents", agentId, "sessions", `${sessionId}.jsonl`);
+    // Also check topic sessions (sessionId-topic-*.jsonl)
+    const sessionsDir = path.join(profile.dir, "agents", agentId, "sessions");
+    if (!fs.existsSync(sessionsDir)) continue;
+
+    const filePath = path.join(sessionsDir, `${sessionId}.jsonl`);
     if (!fs.existsSync(filePath)) continue;
 
     try {
       const stat = fs.statSync(filePath);
-      const readSize = Math.min(stat.size, maxBytes);
       const fd = fs.openSync(filePath, "r");
-      const buffer = Buffer.alloc(readSize);
-      const bytesRead = fs.readSync(fd, buffer, 0, readSize, 0);
+      let content = "";
+
+      // Read from the beginning
+      const headSize = Math.min(stat.size, maxBytes);
+      const headBuf = Buffer.alloc(headSize);
+      fs.readSync(fd, headBuf, 0, headSize, 0);
+      content += headBuf.toString("utf-8");
+
+      // Also read from the end if file is larger (catches late project references)
+      if (stat.size > maxBytes * 2) {
+        const tailSize = Math.min(stat.size - maxBytes, maxBytes);
+        const tailBuf = Buffer.alloc(tailSize);
+        fs.readSync(fd, tailBuf, 0, tailSize, stat.size - tailSize);
+        content += tailBuf.toString("utf-8");
+      }
+
       fs.closeSync(fd);
-      const content = buffer.toString("utf-8", 0, bytesRead);
       const matches = content.match(new RegExp(pattern.source, "gi"));
       return matches ? matches.length : 0;
     } catch {
@@ -202,9 +218,29 @@ function autoDetectProjects(sessions: SessionSummary[]): Map<string, { name: str
     }
   }
 
+  // Allow single-session pattern matches too (they'll grow via co-occurrence)
   for (const [id, project] of patternProjects) {
-    if (project.sessionIds.size >= 2) {
-      result.set(id, { name: project.name, sessionIds: Array.from(project.sessionIds) });
+    result.set(id, { name: project.name, sessionIds: Array.from(project.sessionIds) });
+  }
+
+  // --- Pass 1.5: Deep content scan for unmatched sessions ---
+  // Some sessions have project references deeper in the file (beyond the initial 32KB sample).
+  // For sessions that didn't match yet, do a larger scan sampling both the beginning and end of the file.
+  for (const session of sessions) {
+    if (patternMatched.has(session.id)) continue;
+
+    for (const [pattern, projectName] of CONTENT_PATTERNS) {
+      // Scan larger portion: first 32KB + last 32KB (catches late references)
+      const hits = countPatternInContent(session.id, session.agentId, pattern, 65536);
+      if (hits >= CONTENT_MATCH_THRESHOLD) {
+        const projectId = `auto_${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+        if (!result.has(projectId)) {
+          result.set(projectId, { name: projectName, sessionIds: [] });
+        }
+        result.get(projectId)!.sessionIds.push(session.id);
+        patternMatched.add(session.id);
+        break;
+      }
     }
   }
 

@@ -6,8 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project } from "@/lib/types";
-import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject } from "@/lib/api";
+import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile } from "@/lib/types";
+import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 
 function formatRelativeTime(iso: string): string {
@@ -96,7 +96,10 @@ function DashboardContent() {
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
   const [ackAllLoading, setAckAllLoading] = useState(false);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [version, setVersion] = useState<string | null>(null);
 
+  const selectedProfile = searchParams.get("profile") || "default";
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
 
@@ -121,19 +124,34 @@ function DashboardContent() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
+  function setSelectedProfile(profileId: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("profile", profileId || "default");
+    params.delete("alertPage");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  useEffect(() => {
+    Promise.all([getProfiles(), getVersion()]).then(([p, v]) => {
+      setProfiles(p);
+      setVersion(v);
+    });
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       const agentStatus = showIdleAgents ? "all" : undefined;
       const sessStatus = sessionFilter === "all" ? "all" : sessionFilter === "active" ? undefined : sessionFilter;
       const severityParam = alertFilter !== "all" ? (alertFilter as AlertSeverity) : undefined;
       const offset = (alertPage - 1) * ALERTS_PER_PAGE;
+      const prof = selectedProfile;
       const [a, al, allAl, c, s, p] = await Promise.all([
-        getAgents(agentStatus),
-        getAlerts({ limit: ALERTS_PER_PAGE, offset, severity: severityParam }),
-        getAlerts(),
-        getCosts(),
-        getSessions(undefined, sessStatus, sessionSort),
-        getProjects(),
+        getAgents(agentStatus, prof),
+        getAlerts({ limit: ALERTS_PER_PAGE, offset, severity: severityParam, profile: prof }),
+        getAlerts({ profile: prof }),
+        getCosts(prof),
+        getSessions(undefined, sessStatus, sessionSort, prof),
+        getProjects(prof),
       ]);
       setAgents(a);
       setAlerts(al.alerts);
@@ -145,7 +163,7 @@ function DashboardContent() {
     } finally {
       setLoading(false);
     }
-  }, [showIdleAgents, sessionFilter, sessionSort, alertFilter, alertPage]);
+  }, [showIdleAgents, sessionFilter, sessionSort, alertFilter, alertPage, selectedProfile]);
 
   useEffect(() => {
     fetchData();
@@ -222,9 +240,26 @@ function DashboardContent() {
             </Link>
             <span className="text-sm text-muted-foreground">Dashboard</span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live
+          <div className="flex items-center gap-4">
+            {profiles.length > 0 && (
+              <select
+                value={selectedProfile}
+                onChange={(e) => setSelectedProfile(e.target.value)}
+                className="bg-zinc-900 border border-border/50 rounded-md px-2.5 py-1 text-xs text-muted-foreground focus:outline-none focus:border-emerald-500/50 cursor-pointer appearance-none pr-6"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
+              >
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
+            </div>
+            {version && (
+              <span className="text-[10px] text-muted-foreground/60">v{version}</span>
+            )}
           </div>
         </div>
       </nav>
@@ -669,6 +704,7 @@ function DashboardContent() {
                           <Badge variant="outline" className={`text-[10px] border ${agentColors[session.agentId] || "text-zinc-400"}`}>
                             {session.agentId}
                           </Badge>
+
                           <span className="text-[11px] font-mono text-muted-foreground">
                             {session.model}
                           </span>

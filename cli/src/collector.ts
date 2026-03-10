@@ -12,7 +12,7 @@ interface FileOffsets {
 let offsets: FileOffsets = {};
 let config: ClaWatchConfig;
 let watcher: chokidar.FSWatcher | null = null;
-let gatewayWatcher: chokidar.FSWatcher | null = null;
+let gatewayWatchers: chokidar.FSWatcher[] = [];
 let heartbeatInterval: NodeJS.Timeout | null = null;
 let activeAgents = new Set<string>();
 
@@ -100,27 +100,29 @@ async function readNewLines(filePath: string): Promise<void> {
 }
 
 async function initialScan(): Promise<void> {
-  const agentsDir = path.join(config.openclawDir, 'agents');
-  if (!fs.existsSync(agentsDir)) {
-    log(`Agents directory not found: ${agentsDir}`);
-    return;
-  }
+  for (const openclawDir of config.openclawDirs) {
+    const agentsDir = path.join(openclawDir, 'agents');
+    if (!fs.existsSync(agentsDir)) {
+      log(`Agents directory not found: ${agentsDir}`);
+      continue;
+    }
 
-  const agents = fs.readdirSync(agentsDir).filter((name) => {
-    const sessionsDir = path.join(agentsDir, name, 'sessions');
-    return fs.existsSync(sessionsDir) && fs.statSync(path.join(agentsDir, name)).isDirectory();
-  });
+    const agents = fs.readdirSync(agentsDir).filter((name) => {
+      const sessionsDir = path.join(agentsDir, name, 'sessions');
+      return fs.existsSync(sessionsDir) && fs.statSync(path.join(agentsDir, name)).isDirectory();
+    });
 
-  log(`Found ${agents.length} agents: ${agents.join(', ')}`);
+    log(`Found ${agents.length} agents in ${openclawDir}: ${agents.join(', ')}`);
 
-  for (const agentId of agents) {
-    activeAgents.add(agentId);
-    const sessionsDir = path.join(agentsDir, agentId, 'sessions');
-    const files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl'));
+    for (const agentId of agents) {
+      activeAgents.add(agentId);
+      const sessionsDir = path.join(agentsDir, agentId, 'sessions');
+      const files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl'));
 
-    for (const file of files) {
-      const filePath = path.join(sessionsDir, file);
-      await readNewLines(filePath);
+      for (const file of files) {
+        const filePath = path.join(sessionsDir, file);
+        await readNewLines(filePath);
+      }
     }
   }
 
@@ -128,10 +130,12 @@ async function initialScan(): Promise<void> {
 }
 
 function startFileWatcher(): void {
-  const pattern = path.join(config.openclawDir, 'agents', '*', 'sessions', '*.jsonl');
-  log(`Watching: ${pattern}`);
+  const patterns = config.openclawDirs.map(
+    (dir) => path.join(dir, 'agents', '*', 'sessions', '*.jsonl')
+  );
+  log(`Watching: ${patterns.join(', ')}`);
 
-  watcher = chokidar.watch(pattern, {
+  watcher = chokidar.watch(patterns, {
     persistent: true,
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
@@ -152,50 +156,53 @@ function startFileWatcher(): void {
 }
 
 function startGatewayWatcher(): void {
-  const errLog = path.join(config.openclawDir, 'logs', 'gateway.err.log');
-  if (!fs.existsSync(errLog)) {
-    log(`Gateway error log not found: ${errLog}`);
-    return;
-  }
-
-  let errOffset = 0;
-  try {
-    errOffset = fs.statSync(errLog).size;
-  } catch {
-    // start from beginning
-  }
-
-  gatewayWatcher = chokidar.watch(errLog, {
-    persistent: true,
-    ignoreInitial: true,
-  });
-
-  gatewayWatcher.on('change', async () => {
-    try {
-      const stat = fs.statSync(errLog);
-      if (stat.size <= errOffset) return;
-
-      const fd = fs.openSync(errLog, 'r');
-      const buffer = Buffer.alloc(stat.size - errOffset);
-      fs.readSync(fd, buffer, 0, buffer.length, errOffset);
-      fs.closeSync(fd);
-
-      const lines = buffer.toString('utf-8').split('\n').filter((l) => l.trim());
-      for (const line of lines) {
-        const event = parseGatewayError(line, 'gateway');
-        if (event) {
-          await sendEvent(event);
-        }
-      }
-
-      errOffset = stat.size;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log(`Gateway watcher error: ${msg}`);
+  for (const openclawDir of config.openclawDirs) {
+    const errLog = path.join(openclawDir, 'logs', 'gateway.err.log');
+    if (!fs.existsSync(errLog)) {
+      log(`Gateway error log not found: ${errLog}`);
+      continue;
     }
-  });
 
-  log('Gateway error log watcher started');
+    let errOffset = 0;
+    try {
+      errOffset = fs.statSync(errLog).size;
+    } catch {
+      // start from beginning
+    }
+
+    const gw = chokidar.watch(errLog, {
+      persistent: true,
+      ignoreInitial: true,
+    });
+
+    gw.on('change', async () => {
+      try {
+        const stat = fs.statSync(errLog);
+        if (stat.size <= errOffset) return;
+
+        const fd = fs.openSync(errLog, 'r');
+        const buffer = Buffer.alloc(stat.size - errOffset);
+        fs.readSync(fd, buffer, 0, buffer.length, errOffset);
+        fs.closeSync(fd);
+
+        const lines = buffer.toString('utf-8').split('\n').filter((l) => l.trim());
+        for (const line of lines) {
+          const event = parseGatewayError(line, 'gateway');
+          if (event) {
+            await sendEvent(event);
+          }
+        }
+
+        errOffset = stat.size;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log(`Gateway watcher error: ${msg}`);
+      }
+    });
+
+    gatewayWatchers.push(gw);
+    log(`Gateway error log watcher started for ${openclawDir}`);
+  }
 }
 
 function startHeartbeat(): void {
@@ -219,7 +226,7 @@ export async function startCollector(cfg: ClaWatchConfig): Promise<void> {
 
   log('=== ClaWatch Collector Starting ===');
   log(`Backend: ${config.backendUrl}`);
-  log(`OpenClaw dir: ${config.openclawDir}`);
+  log(`OpenClaw dirs: ${config.openclawDirs.join(', ')}`);
 
   loadOffsets();
   await initialScan();
@@ -235,10 +242,10 @@ export function stopCollector(): void {
     watcher.close();
     watcher = null;
   }
-  if (gatewayWatcher) {
-    gatewayWatcher.close();
-    gatewayWatcher = null;
+  for (const gw of gatewayWatchers) {
+    gw.close();
   }
+  gatewayWatchers = [];
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;

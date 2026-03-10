@@ -1,5 +1,5 @@
 import db from "./db";
-import { listSessions, invalidateCache, SessionSummary } from "./sessions";
+import { listSessions, invalidateCache, discoverProfiles, SessionSummary } from "./sessions";
 
 // --- Stop words to ignore when extracting keywords ---
 const STOP_WORDS = new Set([
@@ -113,11 +113,12 @@ function autoDetectProjects(sessions: SessionSummary[]): Map<string, { name: str
  * Called on backend startup to prefill data.
  */
 export async function syncAllData(): Promise<void> {
-  console.log("[Sync] Scanning OpenClaw data...");
+  const profiles = discoverProfiles();
+  console.log(`[Sync] Scanning OpenClaw data across ${profiles.length} profile(s): ${profiles.map(p => p.id).join(", ") || "default"}...`);
   const start = Date.now();
 
   try {
-    // Force fresh read from JSONL files
+    // Force fresh read from JSONL files (scans all profiles)
     invalidateCache();
     const sessions = await listSessions();
     const totalCost = sessions.reduce((s, x) => s + x.costUsd, 0);

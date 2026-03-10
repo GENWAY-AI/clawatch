@@ -91,9 +91,10 @@ function findDir(name: string): string {
 
 // --- Helper: auto-init if not configured ---
 function autoInit(): ClaWatchConfig {
-  const openclawDir = path.join(os.homedir(), '.openclaw');
+  const { discoverOpenclawDirs } = require('./config');
+  const openclawDirs = discoverOpenclawDirs();
   const config: ClaWatchConfig = {
-    openclawDir,
+    openclawDirs,
     backendUrl: 'http://localhost:3001',
     apiKey: '',
     scanIntervalMs: 60000,
@@ -126,20 +127,29 @@ program
 
     // Auto-init if needed
     if (!configExists()) {
-      const openclawDir = path.join(os.homedir(), '.openclaw');
-      if (!fs.existsSync(openclawDir)) {
-        console.log(chalk.red('OpenClaw directory not found: ~/.openclaw'));
+      const { discoverOpenclawDirs } = require('./config');
+      const openclawDirs: string[] = discoverOpenclawDirs();
+      if (openclawDirs.length === 0 || !openclawDirs.some((d: string) => fs.existsSync(d))) {
+        console.log(chalk.red('No OpenClaw directories found (~/.openclaw or ~/.openclaw-*)'));
         console.log(chalk.yellow('Install OpenClaw first: https://openclaw.ai'));
         process.exit(1);
       }
       console.log(chalk.blue('First run — auto-configuring...'));
       autoInit();
 
-      const agentsDir = path.join(openclawDir, 'agents');
-      const agents = fs.existsSync(agentsDir)
-        ? fs.readdirSync(agentsDir).filter(n => fs.existsSync(path.join(agentsDir, n, 'sessions')))
-        : [];
-      console.log(chalk.green(`  Found ${agents.length} agents: ${agents.join(', ')}`));
+      let totalAgents = 0;
+      for (const openclawDir of openclawDirs) {
+        const agentsDir = path.join(openclawDir, 'agents');
+        const agents = fs.existsSync(agentsDir)
+          ? fs.readdirSync(agentsDir).filter(n => fs.existsSync(path.join(agentsDir, n, 'sessions')))
+          : [];
+        const profileName = path.basename(openclawDir) === '.openclaw' ? 'default' : path.basename(openclawDir).slice('.openclaw-'.length);
+        if (agents.length > 0) {
+          console.log(chalk.green(`  Profile "${profileName}": ${agents.length} agents (${agents.join(', ')})`));
+        }
+        totalAgents += agents.length;
+      }
+      console.log(chalk.green(`  Total: ${totalAgents} agents across ${openclawDirs.length} profile(s)`));
     }
 
     const config = loadConfig();
@@ -348,24 +358,36 @@ program
       }
     }
 
-    const agentsDir = path.join(config.openclawDir, 'agents');
-    let agentCount = 0;
-    let sessionCount = 0;
-
-    if (fs.existsSync(agentsDir)) {
-      const agents = fs.readdirSync(agentsDir).filter(n => fs.existsSync(path.join(agentsDir, n, 'sessions')));
-      agentCount = agents.length;
-      for (const agent of agents) {
-        const sessionsDir = path.join(agentsDir, agent, 'sessions');
-        sessionCount += fs.readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl')).length;
-      }
-    }
+    let totalAgentCount = 0;
+    let totalSessionCount = 0;
 
     console.log(chalk.bold('\n🔍 ClaWatch Status\n'));
     console.log(`  Daemon:   ${daemonRunning ? chalk.green(`running (PID: ${daemonPid})`) : chalk.red('stopped')}`);
     console.log(`  Backend:  ${config.backendUrl}`);
-    console.log(`  Agents:   ${agentCount}`);
-    console.log(`  Sessions: ${sessionCount}`);
+    console.log(`  Profiles: ${config.openclawDirs.length}`);
+
+    for (const openclawDir of config.openclawDirs) {
+      const dirName = path.basename(openclawDir);
+      const profileName = dirName === '.openclaw' ? 'default' : dirName.slice('.openclaw-'.length);
+      const agentsDir = path.join(openclawDir, 'agents');
+      let agentCount = 0;
+      let sessionCount = 0;
+
+      if (fs.existsSync(agentsDir)) {
+        const agents = fs.readdirSync(agentsDir).filter(n => fs.existsSync(path.join(agentsDir, n, 'sessions')));
+        agentCount = agents.length;
+        for (const agent of agents) {
+          const sessionsDir = path.join(agentsDir, agent, 'sessions');
+          sessionCount += fs.readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl')).length;
+        }
+      }
+
+      totalAgentCount += agentCount;
+      totalSessionCount += sessionCount;
+      console.log(`  Profile "${profileName}": ${agentCount} agents, ${sessionCount} sessions`);
+    }
+
+    console.log(`  Total:    ${totalAgentCount} agents, ${totalSessionCount} sessions`);
   });
 
 program

@@ -1,4 +1,4 @@
-import { Agent, Alert, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail } from "./types";
+import { Agent, Alert, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile } from "./types";
 import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails } from "./mock-data";
 
 // API_BASE: In the npm CLI, both frontend and API run on different ports.
@@ -21,11 +21,36 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export async function getAgents(status?: string): Promise<Agent[]> {
+export async function getProfiles(): Promise<Profile[]> {
+  if (USE_MOCK) return [];
+  try {
+    const data = await fetchJson<{ profiles: Profile[] }>("/api/profiles");
+    return data.profiles;
+  } catch {
+    console.warn("API unreachable, skipping profiles");
+    return [];
+  }
+}
+
+export async function getVersion(): Promise<string | null> {
+  if (USE_MOCK) return null;
+  try {
+    const data = await fetchJson<{ version: string }>("/api/version");
+    return data.version;
+  } catch {
+    console.warn("API unreachable, skipping version");
+    return null;
+  }
+}
+
+export async function getAgents(status?: string, profile?: string): Promise<Agent[]> {
   if (USE_MOCK) return mockAgents;
   try {
-    const qs = status ? `?status=${status}` : "";
-    const data = await fetchJson<{ agents: Agent[] }>(`/api/agents${qs}`);
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (profile) params.set("profile", profile);
+    const qs = params.toString();
+    const data = await fetchJson<{ agents: Agent[] }>(`/api/agents${qs ? `?${qs}` : ""}`);
     return data.agents;
   } catch {
     console.warn("API unreachable, falling back to mock data");
@@ -38,6 +63,7 @@ export async function getAlerts(params?: {
   offset?: number;
   severity?: AlertSeverity;
   acknowledged?: boolean;
+  profile?: string;
 }): Promise<AlertsResponse> {
   if (USE_MOCK) {
     let filtered = [...mockAlerts];
@@ -54,6 +80,7 @@ export async function getAlerts(params?: {
     if (params?.offset !== undefined) qs.set("offset", String(params.offset));
     if (params?.severity) qs.set("severity", params.severity);
     if (params?.acknowledged !== undefined) qs.set("acknowledged", String(params.acknowledged));
+    if (params?.profile) qs.set("profile", params.profile);
     const query = qs.toString();
     return await fetchJson<AlertsResponse>(`/api/alerts${query ? `?${query}` : ""}`);
   } catch {
@@ -70,10 +97,11 @@ export async function acknowledgeAllAlerts(severity?: AlertSeverity): Promise<{ 
   );
 }
 
-export async function getCosts(): Promise<CostData> {
+export async function getCosts(profile?: string): Promise<CostData> {
   if (USE_MOCK) return mockCosts;
   try {
-    return await fetchJson<CostData>("/api/costs");
+    const qs = profile ? `?profile=${profile}` : "";
+    return await fetchJson<CostData>(`/api/costs${qs}`);
   } catch {
     console.warn("API unreachable, falling back to mock data");
     return mockCosts;
@@ -98,7 +126,8 @@ export async function acknowledgeAlert(id: string): Promise<void> {
 export async function getSessions(
   agentId?: string,
   status?: string,
-  sort?: string
+  sort?: string,
+  profile?: string
 ): Promise<Session[]> {
   if (USE_MOCK) {
     let sessions = [...mockSessions];
@@ -114,6 +143,7 @@ export async function getSessions(
     if (agentId) params.set("agentId", agentId);
     if (status) params.set("status", status);
     if (sort) params.set("sort", sort);
+    if (profile) params.set("profile", profile);
     const qs = params.toString();
     const data = await fetchJson<{ sessions: Session[] }>(`/api/sessions${qs ? `?${qs}` : ""}`);
     return data.sessions;
@@ -139,10 +169,11 @@ export async function getSession(id: string): Promise<SessionDetail> {
   }
 }
 
-export async function getProjects(): Promise<Project[]> {
+export async function getProjects(profile?: string): Promise<Project[]> {
   if (USE_MOCK) return mockProjects;
   try {
-    const data = await fetchJson<{ projects: Project[] }>("/api/projects");
+    const qs = profile ? `?profile=${profile}` : "";
+    const data = await fetchJson<{ projects: Project[] }>(`/api/projects${qs}`);
     return data.projects;
   } catch {
     console.warn("API unreachable, falling back to mock data");

@@ -84,6 +84,8 @@ export default function SessionClient() {
   const [error, setError] = useState<string | null>(null);
   const [collapsedTools, setCollapsedTools] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef<number>(0);
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     async function load() {
@@ -97,13 +99,33 @@ export default function SessionClient() {
       }
     }
     load();
+
+    // Poll for new messages every 5 seconds
+    const interval = setInterval(async () => {
+      try {
+        const data = await getSession(id);
+        setSession(data);
+      } catch {
+        // Silently ignore poll errors — don't overwrite existing data
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [id]);
 
+  // Auto-scroll: instant on initial load, smooth when new messages arrive
   useEffect(() => {
-    if (session && messagesEndRef.current) {
+    if (!session || !messagesEndRef.current) return;
+
+    const messageCount = session.messages.length;
+    if (isInitialLoadRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "instant" });
+      isInitialLoadRef.current = false;
+    } else if (messageCount > prevMessageCountRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [session?.id]);
+    prevMessageCountRef.current = messageCount;
+  }, [session?.messages?.length]);
 
   function toggleToolCollapse(msgId: string) {
     setCollapsedTools((prev) => {

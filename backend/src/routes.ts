@@ -365,6 +365,11 @@ function humanizeError(error: string, agentName: string): string {
     // Auth/cert
     [/token.*expir/i, `${agentName} auth token expired`],
     [/CERT_|certificate/i, `${agentName} SSL certificate error`],
+    // File/path errors
+    [/ENOENT|no such file/i, `${agentName} can't find a required file`],
+    [/EISDIR/i, `${agentName} invalid file operation`],
+    [/spawn.*ENOENT|command not found/i, `${agentName} missing required command`],
+    [/killed|SIGKILL|SIGTERM/i, `${agentName} process was killed`],
     // OpenClaw / gateway specific
     [/[Ss]lack\s*bot\s*token\s*missing/i, `${agentName} Slack credentials not configured`],
     [/[Rr]etry failed for delivery/i, `${agentName} message delivery failing`],
@@ -387,27 +392,37 @@ function humanizeError(error: string, agentName: string): string {
     if (pattern.test(cleanedError)) return summary;
   }
 
-  // Fallback: try to extract the core meaning
-  // "ErrorType: message" format
+  // Smart fallback: interpret the error instead of truncating
+
+  // Try "ErrorType: message" format
   const typeMatch = cleanedError.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
   if (typeMatch) {
     const shortMsg = typeMatch[2].trim();
     return shortMsg.length > 50 ? `${agentName}: ${shortMsg.slice(0, 47)}...` : `${agentName}: ${shortMsg}`;
   }
 
-  // Look for a verb phrase that explains what happened
-  const actionMatch = cleanedError.match(/(failed to \w+|cannot \w+|unable to \w+|could not \w+|error \w+ing)/i);
+  // Look for a verb phrase
+  const actionMatch = cleanedError.match(/(failed to \w+|cannot \w+|unable to \w+|could not \w+)/i);
   if (actionMatch) {
     return `${agentName} ${actionMatch[1].toLowerCase()}`;
   }
 
-  // Last resort: first clause only (before comma/semicolon/parenthesis), keep short
+  // Keyword-based categorization — produce a real summary, not a truncation
+  const lower = cleanedError.toLowerCase();
+  if (lower.includes("connect") || lower.includes("socket")) return `${agentName} connection issue`;
+  if (lower.includes("timeout") || lower.includes("timed out")) return `${agentName} operation timed out`;
+  if (lower.includes("permission") || lower.includes("denied") || lower.includes("access")) return `${agentName} permission error`;
+  if (lower.includes("invalid") || lower.includes("unexpected") || lower.includes("unknown")) return `${agentName} configuration error`;
+  if (lower.includes("missing") || lower.includes("not found")) return `${agentName} missing resource`;
+  if (lower.includes("failed") || lower.includes("error") || lower.includes("crash")) return `${agentName} operation failed`;
+
+  // Last resort: first clause only, very short
   const clean = cleanedError.replace(/\n.*/s, "").trim();
   if (!clean || clean.length < 5) {
     return `${agentName} encountered errors`;
   }
   const clause = clean.split(/[,;(]/)[0].trim();
-  return clause.length > 50 ? `${agentName}: ${clause.slice(0, 47)}...` : `${agentName}: ${clause}`;
+  return clause.length > 40 ? `${agentName} error` : `${agentName}: ${clause}`;
 }
 
 function cleanErrorForDisplay(error: string): string {

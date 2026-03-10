@@ -90,47 +90,86 @@ function extractErrorSummary(error: string): string {
 
   // Common patterns → human-readable summaries
   const patterns: [RegExp, string][] = [
+    // Network
     [/ECONNREFUSED/i, "Connection refused"],
-    [/ECONNRESET/i, "Connection was reset"],
+    [/ECONNRESET/i, "Connection lost"],
     [/ETIMEDOUT/i, "Connection timed out"],
-    [/ENOTFOUND/i, "Host not found (DNS failure)"],
+    [/ENOTFOUND/i, "Can't reach remote server"],
     [/EADDRINUSE/i, "Port already in use"],
     [/EPERM|EACCES/i, "Permission denied"],
-    [/ENOMEM/i, "Out of memory"],
+    [/ENOMEM|out of memory|heap|OOM/i, "Out of memory"],
+    // HTTP
     [/rate.?limit/i, "API rate limit exceeded"],
     [/401|unauthorized/i, "Authentication failed"],
-    [/403|forbidden/i, "Access forbidden"],
-    [/404|not found/i, "Resource not found"],
-    [/500|internal server error/i, "Internal server error"],
+    [/403|forbidden/i, "Access denied"],
+    [/500|internal server error/i, "Remote server error"],
     [/502|bad gateway/i, "Bad gateway"],
     [/503|service unavailable/i, "Service unavailable"],
     [/504|gateway timeout/i, "Gateway timeout"],
-    [/timeout/i, "Operation timed out"],
-    [/SQLITE_BUSY/i, "Database is locked"],
-    [/SQLITE_CORRUPT/i, "Database corruption detected"],
-    [/Cannot read propert(y|ies) of (undefined|null)/i, "Null reference error"],
-    [/is not a function/i, "Type error (calling non-function)"],
-    [/JSON\.parse|Unexpected token/i, "Invalid JSON response"],
+    // Code
+    [/Cannot read propert/i, "Code bug (null reference)"],
+    [/is not a function/i, "Code bug (type error)"],
+    [/JSON\.parse|Unexpected token/i, "Malformed data received"],
+    [/SQLITE_BUSY/i, "Database locked"],
+    [/SQLITE_CORRUPT/i, "Database corruption"],
+    // Auth/cert
     [/CERT_|certificate/i, "SSL certificate error"],
-    [/token.*expir/i, "Authentication token expired"],
-    [/out of.?range|overflow/i, "Value out of range"],
+    [/token.*expir/i, "Auth token expired"],
+    // File/path
+    [/ENOENT|no such file/i, "Missing file or directory"],
+    [/EISDIR/i, "Invalid file operation"],
+    // OpenClaw / gateway specific
+    [/[Ss]lack\s*bot\s*token\s*missing/i, "Slack credentials not configured"],
+    [/[Rr]etry failed for delivery/i, "Message delivery failing"],
+    [/socket.?mode failed/i, "Slack connection failing"],
+    [/pong wasn't received|pong.*timeout/i, "Slack connection timing out"],
+    [/[Uu]nhandled promise rejection/i, "Unhandled crash"],
+    [/allowlist contains unknown/i, "Misconfigured tool settings"],
+    [/[Ss]kipping skill path/i, "Skill path issue"],
+    [/hostname conflict/i, "Hostname conflict"],
+    [/spawn.*ENOENT|command not found/i, "Missing required command"],
+    [/killed|SIGKILL|SIGTERM/i, "Process was killed"],
+    // Generic (broad — keep last)
+    [/timeout/i, "Operation timed out"],
+    [/connection refused/i, "Connection refused"],
+    [/missing.*config|config.*missing/i, "Missing configuration"],
   ];
 
   for (const [pattern, summary] of patterns) {
     if (pattern.test(cleaned)) return summary;
   }
 
-  // Fallback: extract the error type and first meaningful part from cleaned string
+  // Smart fallback: interpret the error instead of truncating
+  return smartFallback(cleaned);
+}
+
+function smartFallback(cleaned: string): string {
+  // Try "ErrorType: message" format
   const typeMatch = cleaned.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
   if (typeMatch) {
     const msg = typeMatch[2].trim();
-    return msg.length > 80 ? msg.slice(0, 77) + "..." : msg;
+    return msg.length > 50 ? msg.slice(0, 47) + "..." : msg;
   }
 
-  // Just clean up and truncate
+  // Look for a verb phrase
+  const actionMatch = cleaned.match(/(failed to \w+|cannot \w+|unable to \w+|could not \w+)/i);
+  if (actionMatch) {
+    return actionMatch[1].charAt(0).toUpperCase() + actionMatch[1].slice(1).toLowerCase();
+  }
+
+  // Keyword-based categorization
+  const lower = cleaned.toLowerCase();
+  if (lower.includes("connect") || lower.includes("socket")) return "Connection issue";
+  if (lower.includes("permission") || lower.includes("denied") || lower.includes("access")) return "Permission error";
+  if (lower.includes("invalid") || lower.includes("unexpected") || lower.includes("unknown")) return "Invalid data or configuration";
+  if (lower.includes("missing") || lower.includes("not found")) return "Missing resource";
+  if (lower.includes("failed") || lower.includes("error") || lower.includes("crash")) return "Operation failed";
+
+  // Last resort: first clause only, very short
   const firstLine = cleaned.replace(/\n.*/s, "").trim();
-  if (!firstLine || firstLine.length < 3) return "Unknown error";
-  return firstLine.length > 80 ? firstLine.slice(0, 77) + "..." : firstLine;
+  if (!firstLine || firstLine.length < 5) return "Unknown error";
+  const clause = firstLine.split(/[,;(]/)[0].trim();
+  return clause.length > 50 ? clause.slice(0, 47) + "..." : clause;
 }
 
 function checkErrorSpikes(): void {

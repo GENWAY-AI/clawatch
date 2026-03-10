@@ -29,8 +29,9 @@ router.get("/profiles", (_req: Request, res: Response) => {
 
 router.get("/version", (_req: Request, res: Response) => {
   const candidates = [
-    path.join(__dirname, "..", "..", "cli", "package.json"),  // dev/source
-    path.join(__dirname, "..", "package.json"),               // bundled in CLI
+    path.join(__dirname, "..", "..", "cli", "package.json"),  // dev/source (repo root)
+    path.join(__dirname, "..", "..", "package.json"),          // installed npm package (backend/dist -> package root)
+    path.join(__dirname, "..", "package.json"),               // fallback
   ];
   for (const candidate of candidates) {
     try {

@@ -449,8 +449,16 @@ router.get("/analytics", async (req: Request, res: Response) => {
 
     let sessions = await listSessions(profile);
 
+    // For hourly view, default to last 3 days if no from specified
+    let effectiveFrom = from;
+    if (groupBy === "hour" && !from) {
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setUTCDate(threeDaysAgo.getUTCDate() - 3);
+      effectiveFrom = threeDaysAgo.toISOString();
+    }
+
     // Filter by date range using startedAt
-    if (from) sessions = sessions.filter((s) => s.startedAt >= from);
+    if (effectiveFrom) sessions = sessions.filter((s) => s.startedAt >= effectiveFrom!);
     if (to) sessions = sessions.filter((s) => s.startedAt <= to);
 
     // Get project tags for all sessions
@@ -460,6 +468,9 @@ router.get("/analytics", async (req: Request, res: Response) => {
     // Helper: get bucket date key for a session
     function getBucketKey(dateStr: string): string {
       const d = new Date(dateStr);
+      if (groupBy === "hour") {
+        return d.toISOString().slice(0, 13) + ":00"; // "2026-03-10T14:00"
+      }
       if (groupBy === "week") {
         // ISO week starts on Monday
         const day = d.getUTCDay();
@@ -477,10 +488,14 @@ router.get("/analytics", async (req: Request, res: Response) => {
       const current = new Date(minDate);
       const end = new Date(maxDate);
       while (current <= end) {
-        keys.push(current.toISOString().slice(0, 10));
-        if (groupBy === "week") {
+        if (groupBy === "hour") {
+          keys.push(current.toISOString().slice(0, 13) + ":00");
+          current.setUTCHours(current.getUTCHours() + 1);
+        } else if (groupBy === "week") {
+          keys.push(current.toISOString().slice(0, 10));
           current.setUTCDate(current.getUTCDate() + 7);
         } else {
+          keys.push(current.toISOString().slice(0, 10));
           current.setUTCDate(current.getUTCDate() + 1);
         }
       }

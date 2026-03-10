@@ -107,7 +107,7 @@ const features = [
 
 const providers = [
   { name: 'OpenClaw', icon: '🦞', status: 'supported' as const },
-  { name: 'NanoClaw', icon: '🔬', status: 'supported' as const },
+  { name: 'NanoClaw', icon: <img src="/providers/nanoclaw.webp" alt="NanoClaw" className="size-7 rounded" />, status: 'supported' as const },
   { name: 'LangChain', icon: '🔗', status: 'coming' as const },
   { name: 'AutoGPT', icon: '🤖', status: 'coming' as const },
   { name: 'CrewAI', icon: '👥', status: 'coming' as const },

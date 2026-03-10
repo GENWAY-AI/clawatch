@@ -329,6 +329,7 @@ function DashboardContent() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [version, setVersion] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [analyticsAllTime, setAnalyticsAllTime] = useState<{ totalTokens: number; totalSessions: number } | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [hiddenAgentSeries, setHiddenAgentSeries] = useState<Set<string>>(new Set());
   const [hiddenProjectSeries, setHiddenProjectSeries] = useState<Set<string>>(new Set());
@@ -419,12 +420,26 @@ function DashboardContent() {
     if (tab !== "analytics") return;
     let cancelled = false;
     setAnalyticsLoading(true);
-    getAnalytics({ profile: selectedProfile, groupBy: analyticsGroupBy }).then((data) => {
-      if (!cancelled) {
-        setAnalyticsData(data);
-        setAnalyticsLoading(false);
-      }
-    }).catch(() => {
+    const fetches: Promise<void>[] = [
+      getAnalytics({ profile: selectedProfile, groupBy: analyticsGroupBy }).then((data) => {
+        if (!cancelled) setAnalyticsData(data);
+      }),
+    ];
+    // When in hourly mode (3 days only), also fetch all-time stats for tokens/sessions
+    if (analyticsGroupBy === "hour") {
+      fetches.push(
+        getAnalytics({ profile: selectedProfile, groupBy: "day" }).then((allTime) => {
+          if (!cancelled) {
+            const totalTokens = allTime.buckets.reduce((s, b) => s + b.tokenCount, 0);
+            const totalSessions = allTime.buckets.reduce((s, b) => s + b.sessionCount, 0);
+            setAnalyticsAllTime({ totalTokens, totalSessions });
+          }
+        })
+      );
+    } else {
+      setAnalyticsAllTime(null);
+    }
+    Promise.all(fetches).catch(() => {}).finally(() => {
       if (!cancelled) setAnalyticsLoading(false);
     });
     return () => { cancelled = true; };
@@ -1317,7 +1332,10 @@ function DashboardContent() {
                           <CardTitle className="text-sm font-medium text-muted-foreground">Total Tokens</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-3xl font-bold">{formatTokens(totalTokens)}</div>
+                          <div className="text-3xl font-bold">{formatTokens(analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalTokens : totalTokens)}</div>
+                          {analyticsGroupBy === "hour" && (
+                            <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
+                          )}
                         </CardContent>
                       </Card>
                       <Card>
@@ -1325,7 +1343,10 @@ function DashboardContent() {
                           <CardTitle className="text-sm font-medium text-muted-foreground">Total Sessions</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-3xl font-bold">{totalSessions}</div>
+                          <div className="text-3xl font-bold">{analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalSessions : totalSessions}</div>
+                          {analyticsGroupBy === "hour" && (
+                            <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
+                          )}
                         </CardContent>
                       </Card>
                       <Card>

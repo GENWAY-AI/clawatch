@@ -1,4 +1,4 @@
-import { Agent, Alert, AlertDetails, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile, AnalyticsData } from "./types";
+import { Agent, Alert, AlertDetails, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile, AnalyticsData, SpendData, CostLimits } from "./types";
 import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails, mockAlertDetails } from "./mock-data";
 
 // API_BASE: In the npm CLI, both frontend and API run on different ports.
@@ -333,4 +333,35 @@ export async function getAnalytics(params: {
     console.warn("API unreachable, falling back to mock analytics data");
     return mockAnalytics;
   }
+}
+
+const mockSpendData: SpendData = {
+  today: 94.72,
+  mtd: 236.83,
+  byAgent: {
+    anas: { today: 36.21, mtd: 69.12 },
+    ofek: { today: 42.83, mtd: 112.18 },
+    dor: { today: 15.68, mtd: 55.53 },
+  },
+  limits: { type: null, amount: null, agentLimits: {} },
+  usagePercent: null,
+};
+
+export async function getSpend(profile?: string): Promise<SpendData> {
+  if (USE_MOCK) return mockSpendData;
+  try {
+    const qs = profile ? `?profile=${profile}` : "";
+    return await fetchJson<SpendData>(`/api/spend${qs}`);
+  } catch {
+    console.warn("API unreachable, falling back to mock spend data");
+    return mockSpendData;
+  }
+}
+
+export async function setCostLimits(limits: CostLimits): Promise<CostLimits> {
+  if (USE_MOCK) return limits;
+  return await fetchJson<CostLimits>("/api/settings/cost-limits", {
+    method: "PUT",
+    body: JSON.stringify(limits),
+  });
 }

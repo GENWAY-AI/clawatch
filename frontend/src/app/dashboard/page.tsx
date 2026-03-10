@@ -6,8 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile, AnalyticsData } from "@/lib/types";
-import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics } from "@/lib/api";
+import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile, AnalyticsData, SpendData, CostLimits } from "@/lib/types";
+import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics, getSpend, setCostLimits } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
@@ -267,6 +267,125 @@ function getHumanDescription(alert: Alert, details: AlertDetails | null): string
   }
 }
 
+function CostSettingsModal({
+  limits,
+  agents,
+  onSave,
+  onClose,
+}: {
+  limits: CostLimits;
+  agents: string[];
+  onSave: (limits: CostLimits) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [limitType, setLimitType] = useState<'daily' | 'monthly' | null>(limits.type);
+  const [amount, setAmount] = useState<string>(limits.amount?.toString() ?? "");
+  const [agentLimits, setAgentLimits] = useState<Record<string, string>>(
+    Object.fromEntries(Object.entries(limits.agentLimits).map(([k, v]) => [k, v.toString()]))
+  );
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
+        <h2 className="text-lg font-semibold text-white mb-4">Cost Limits</h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm text-muted-foreground mb-2 block">Limit Type</label>
+            <div className="flex gap-2">
+              {([['daily', 'Daily'], ['monthly', 'Monthly'], [null, 'No Limit']] as const).map(([val, label]) => (
+                <button
+                  key={label}
+                  onClick={() => setLimitType(val)}
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                    limitType === val
+                      ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
+                      : "border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {limitType && (
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">
+                {limitType === 'daily' ? 'Daily' : 'Monthly'} Limit ($)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:border-emerald-500/50"
+                placeholder="e.g. 50"
+              />
+            </div>
+          )}
+
+          {limitType && agents.length > 0 && (
+            <div>
+              <label className="text-sm text-muted-foreground mb-2 block">Per-Agent Overrides</label>
+              <div className="space-y-2">
+                {agents.map((agent) => (
+                  <div key={agent} className="flex items-center gap-2">
+                    <span className="text-sm text-zinc-300 w-20">{agent}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={agentLimits[agent] ?? ""}
+                      onChange={(e) => setAgentLimits((prev) => ({ ...prev, [agent]: e.target.value }))}
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:border-emerald-500/50"
+                      placeholder="No override"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                const parsedAgentLimits: Record<string, number> = {};
+                for (const [k, v] of Object.entries(agentLimits)) {
+                  const n = parseFloat(v);
+                  if (!isNaN(n) && n > 0) parsedAgentLimits[k] = n;
+                }
+                await onSave({
+                  type: limitType,
+                  amount: limitType ? (parseFloat(amount) || null) : null,
+                  agentLimits: parsedAgentLimits,
+                });
+              } finally {
+                setSaving(false);
+              }
+            }}
+            className="px-4 py-2 text-sm rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   return (
     <Suspense fallback={
@@ -333,6 +452,8 @@ function DashboardContent() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [hiddenAgentSeries, setHiddenAgentSeries] = useState<Set<string>>(new Set());
   const [hiddenProjectSeries, setHiddenProjectSeries] = useState<Set<string>>(new Set());
+  const [spendData, setSpendData] = useState<SpendData | null>(null);
+  const [showCostSettings, setShowCostSettings] = useState(false);
 
   const selectedProfile = searchParams.get("profile") || "default";
   const analyticsGroupBy = (searchParams.get("groupBy") as "hour" | "day" | "week") || "day";
@@ -460,7 +581,7 @@ function DashboardContent() {
       const alertOffset = (alertPage - 1) * ALERTS_PER_PAGE;
       const sessionOffset = (sessionPage - 1) * SESSIONS_PER_PAGE;
       const prof = selectedProfile;
-      const [a, allAgents, al, allAl, c, sessResult, p] = await Promise.all([
+      const [a, allAgents, al, allAl, c, sessResult, p, sp] = await Promise.all([
         getAgents(agentStatus, prof),
         getAgents("all", prof),
         getAlerts({ limit: ALERTS_PER_PAGE, offset: alertOffset, severity: severityParam, profile: prof }),
@@ -468,6 +589,7 @@ function DashboardContent() {
         getCosts(prof),
         getSessions({ status: sessStatus, sort: sessionSort, profile: prof, limit: SESSIONS_PER_PAGE, offset: sessionOffset }),
         getProjects(prof),
+        getSpend(prof),
       ]);
       setAgents(a);
       setTotalAgentCount(allAgents.length);
@@ -478,6 +600,7 @@ function DashboardContent() {
       setSessions(sessResult.sessions);
       setSessionsTotal(sessResult.total);
       setProjects(p);
+      setSpendData(sp);
     } finally {
       setLoading(false);
     }
@@ -643,7 +766,7 @@ function DashboardContent() {
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Stats Overview */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Agents</CardTitle>
@@ -662,10 +785,76 @@ function DashboardContent() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Cost</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Today&apos;s Spend</CardTitle>
+                <button
+                  onClick={() => setShowCostSettings(true)}
+                  className="text-zinc-500 hover:text-emerald-400 transition-colors"
+                  title="Cost settings"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">${totalCost.toFixed(2)}</div>
+              <div className="text-3xl font-bold">${spendData?.today.toFixed(2) ?? "—"}</div>
+              {spendData?.limits.type === "daily" && spendData.limits.amount && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                    <span>{((spendData.today / spendData.limits.amount) * 100).toFixed(0)}%</span>
+                    <span>of ${spendData.limits.amount} limit</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        spendData.today / spendData.limits.amount > 0.8
+                          ? "bg-red-500"
+                          : spendData.today / spendData.limits.amount > 0.6
+                            ? "bg-amber-500"
+                            : "bg-emerald-500"
+                      }`}
+                      style={{ width: `${Math.min(100, (spendData.today / spendData.limits.amount) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-muted-foreground">MTD Spend</CardTitle>
+                <button
+                  onClick={() => setShowCostSettings(true)}
+                  className="text-zinc-500 hover:text-emerald-400 transition-colors"
+                  title="Cost settings"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">${spendData?.mtd.toFixed(2) ?? "—"}</div>
+              {spendData?.limits.type === "monthly" && spendData.limits.amount && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                    <span>{((spendData.mtd / spendData.limits.amount) * 100).toFixed(0)}%</span>
+                    <span>of ${spendData.limits.amount} limit</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        spendData.mtd / spendData.limits.amount > 0.8
+                          ? "bg-red-500"
+                          : spendData.mtd / spendData.limits.amount > 0.6
+                            ? "bg-amber-500"
+                            : "bg-emerald-500"
+                      }`}
+                      style={{ width: `${Math.min(100, (spendData.mtd / spendData.limits.amount) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card
@@ -687,6 +876,20 @@ function DashboardContent() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Cost Settings Modal */}
+        {showCostSettings && spendData && (
+          <CostSettingsModal
+            limits={spendData.limits}
+            agents={Object.keys(spendData.byAgent)}
+            onSave={async (newLimits) => {
+              await setCostLimits(newLimits);
+              setShowCostSettings(false);
+              fetchData();
+            }}
+            onClose={() => setShowCostSettings(false)}
+          />
+        )}
 
         {/* Tabs */}
         <div className="flex items-center gap-1 border-b border-border/50">

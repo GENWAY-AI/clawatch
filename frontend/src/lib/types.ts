@@ -185,3 +185,17 @@ export interface AnalyticsData {
   byAgent: AgentAnalytics[];
   byProject: ProjectAnalytics[];
 }
+
+export interface SpendData {
+  today: number;
+  mtd: number;
+  byAgent: Record<string, { today: number; mtd: number }>;
+  limits: CostLimits;
+  usagePercent: number | null;
+}
+
+export interface CostLimits {
+  type: 'daily' | 'monthly' | null;
+  amount: number | null;
+  agentLimits: Record<string, number>;
+}

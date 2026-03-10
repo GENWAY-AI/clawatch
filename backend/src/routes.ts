@@ -309,17 +309,64 @@ function generateErrorSummary(relatedErrors: { error: string; timestamp: string 
 
   // Pattern-match the top error for a human-readable summary
   const summary = humanizeError(topError, agentName);
-  const uniqueCount = groups.size;
-  const totalCount = relatedErrors.length;
 
-  let description: string;
-  if (uniqueCount === 1) {
-    description = `${agentName} hit the same error ${totalCount} time${totalCount > 1 ? "s" : ""} recently: "${cleanErrorForDisplay(topError)}". This usually means the agent is stuck retrying a failing operation.`;
-  } else {
-    description = `${agentName} encountered ${totalCount} errors (${uniqueCount} unique) recently. The most common one (${topCount}×) is: "${cleanErrorForDisplay(topError)}".`;
-  }
+  // Generate a plain-English description — no raw error text, no counts (frontend shows ×N)
+  const description = generatePlainDescription(summary, agentName, topError);
 
   return { summary, description };
+}
+
+function generatePlainDescription(title: string, agentName: string, topError: string): string {
+  const cleaned = stripLogPrefix(topError).toLowerCase();
+
+  // Map known titles/patterns to plain-English impact descriptions
+  if (/can't connect|connection refused/i.test(title))
+    return `${agentName} is unable to reach a service it depends on. This may prevent it from completing its tasks until the service is back online.`;
+  if (/can't reach|DNS failure/i.test(title))
+    return `${agentName} can't look up a server address. The remote service may be down or there could be a network issue.`;
+  if (/connection lost|connection reset/i.test(title))
+    return `${agentName} keeps losing its connection to an external service. This usually means the remote server is unstable or overloaded.`;
+  if (/timed out/i.test(title))
+    return `${agentName} waited too long for a response. The target service may be slow or unresponsive.`;
+  if (/rate limit/i.test(title))
+    return `${agentName} is making too many API calls and being throttled. It needs to slow down or wait before retrying.`;
+  if (/authentication failed|auth token expired/i.test(title))
+    return `${agentName} can't authenticate with an external service. Its credentials may need to be refreshed or reconfigured.`;
+  if (/access denied|permission/i.test(title))
+    return `${agentName} tried to do something it doesn't have permission for. Check its access rights.`;
+  if (/Slack credentials not configured/i.test(title))
+    return `${agentName} can't send messages to Slack because the bot token isn't set up. Configure the Slack integration to fix this.`;
+  if (/message delivery failing/i.test(title))
+    return `${agentName} is failing to deliver messages. This may be caused by missing credentials or a service outage.`;
+  if (/Slack connection/i.test(title))
+    return `${agentName} is having trouble staying connected to Slack. The connection keeps dropping or timing out.`;
+  if (/crashed|unhandled/i.test(title))
+    return `${agentName} crashed unexpectedly. It may need to be restarted or the underlying bug needs to be fixed.`;
+  if (/misconfigured tool|configuration error/i.test(title))
+    return `${agentName} has a configuration issue that may cause some features to not work correctly. Review its settings.`;
+  if (/skill path/i.test(title))
+    return `${agentName} has a skill that points to an invalid location. The skill may not load correctly.`;
+  if (/can't find a required file|missing file/i.test(title))
+    return `${agentName} is looking for a file that doesn't exist. A dependency may be missing or a path may be wrong.`;
+  if (/invalid file operation/i.test(title))
+    return `${agentName} tried to read a directory as a file. There may be a path configuration issue.`;
+  if (/missing required command/i.test(title))
+    return `${agentName} needs a system command that isn't installed. Install the missing dependency.`;
+  if (/process was killed/i.test(title))
+    return `${agentName} was forcefully stopped. This could be due to resource limits or a manual intervention.`;
+  if (/code bug|null reference|type error/i.test(title))
+    return `${agentName} hit a bug in its code. This is likely a software issue that needs a fix.`;
+  if (/malformed data|invalid data/i.test(title))
+    return `${agentName} received data it couldn't understand. The data source may have changed format.`;
+  if (/database/i.test(title))
+    return `${agentName} is having trouble accessing its database. It may be locked by another process or corrupted.`;
+  if (/hostname conflict/i.test(title))
+    return `${agentName} detected a network naming conflict. Multiple services may be competing for the same name.`;
+  if (/spending exceeded/i.test(title))
+    return `${agentName} has gone over its budget. Consider reviewing its usage or adjusting the threshold.`;
+
+  // Generic fallback — still meaningful
+  return `${agentName} ran into a problem that may affect its ability to work properly. Check the technical details for more information.`;
 }
 
 // Strip common log prefixes: timestamps, log levels, bracketed tags

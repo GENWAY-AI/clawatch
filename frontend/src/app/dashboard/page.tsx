@@ -999,6 +999,15 @@ function DashboardContent() {
                         <Badge variant="outline" className={`${sc.color} border text-xs`}>
                           {sc.label}
                         </Badge>
+                        <div className="relative group/tooltip">
+                          <div className="size-4 rounded-full bg-zinc-800 flex items-center justify-center cursor-help text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors">
+                            i
+                          </div>
+                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-zinc-300 opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all z-50 shadow-lg pointer-events-none">
+                            {sc.tooltip}
+                            <div className="absolute left-1/2 -translate-x-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-700" />
+                          </div>
+                        </div>
                         {agent.overLimit && agent.limit != null && (() => {
                           const spend = agent.limitType === "daily" ? (agent.todaySpend ?? 0) : (agent.mtdSpend ?? 0);
                           const over = spend - agent.limit;

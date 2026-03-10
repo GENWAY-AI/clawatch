@@ -143,6 +143,48 @@ function extractAllToolCalls(content: any): Array<{ name: string; input: string 
     });
 }
 
+function summarizeToolCall(tool: { name: string; input: string }): string {
+  try {
+    const args = typeof tool.input === "string" ? JSON.parse(tool.input) : tool.input;
+    switch (tool.name) {
+      case "read":
+      case "Read": {
+        const p = args.file_path || args.path || args.filePath || "";
+        return p ? `Read ${shortenPath(p)}` : `Read file`;
+      }
+      case "write":
+      case "Write": {
+        const p = args.file_path || args.path || args.filePath || "";
+        return p ? `Write ${shortenPath(p)}` : `Write file`;
+      }
+      case "edit":
+      case "Edit": {
+        const p = args.file_path || args.path || args.filePath || "";
+        return p ? `Edit ${shortenPath(p)}` : `Edit file`;
+      }
+      case "exec": {
+        const cmd = args.command || "";
+        return cmd ? `Run \`${truncate(cmd, 80)}\`` : `Run command`;
+      }
+      case "sessions_spawn": {
+        const task = args.task || "";
+        return task ? `Spawn: ${truncate(task, 80)}` : `Spawn sub-agent`;
+      }
+      default:
+        return `Called ${tool.name}`;
+    }
+  } catch {
+    return `Called ${tool.name}`;
+  }
+}
+
+function shortenPath(p: string): string {
+  // Show just the filename or last 2 segments for readability
+  const parts = p.split("/").filter(Boolean);
+  if (parts.length <= 2) return p;
+  return parts.slice(-2).join("/");
+}
+
 function isRealUserMessage(text: string): boolean {
   if (!text || text.trim().length < 5) return false;
   const t = text.trim();
@@ -297,7 +339,7 @@ async function parseSessionFile(
         if (role === "assistant" && !text) {
           const allTools = extractAllToolCalls(msg.content);
           if (allTools.length > 0) {
-            text = allTools.map((t) => `Called ${t.name}`).join(", ");
+            text = allTools.map((t) => summarizeToolCall(t)).join("\n");
           }
         }
 

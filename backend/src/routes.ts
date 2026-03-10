@@ -316,9 +316,7 @@ function generateErrorSummary(relatedErrors: { error: string; timestamp: string 
   return { summary, description };
 }
 
-function generatePlainDescription(title: string, agentName: string, topError: string): string {
-  const cleaned = stripLogPrefix(topError).toLowerCase();
-
+function generatePlainDescription(title: string, agentName: string, _topError: string): string {
   // Map known titles/patterns to plain-English impact descriptions
   if (/can't connect|connection refused/i.test(title))
     return `${agentName} is unable to reach a service it depends on. This may prevent it from completing its tasks until the service is back online.`;

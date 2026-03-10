@@ -4,8 +4,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$SCRIPT_DIR/.."
 
-BACKEND_PORT="${BACKEND_PORT:-3001}"
-FRONTEND_PORT="${FRONTEND_PORT:-3000}"
+BACKEND_PORT="${BACKEND_PORT:-7050}"
+FRONTEND_PORT="${FRONTEND_PORT:-7051}"
 
 echo "🔍 ClaWatch Dev Server"
 echo "   Backend:  http://localhost:$BACKEND_PORT"

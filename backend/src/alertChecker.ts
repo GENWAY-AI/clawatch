@@ -209,18 +209,25 @@ function checkErrorSpikes(): void {
 }
 
 function checkCostThresholds(): void {
+  // Use configured limit from settings, fall back to env var / $10 default
+  const limitsRow = db.prepare("SELECT value FROM settings WHERE key = ?").get("cost-limits") as { value: string } | undefined;
+  const limits = limitsRow ? JSON.parse(limitsRow.value) : null;
+  const globalThreshold = limits?.amount ?? COST_THRESHOLD_USD;
+
   const rows = db.prepare(
-    `SELECT id, name, costUsd FROM agents WHERE costUsd >= ?`
-  ).all(COST_THRESHOLD_USD) as { id: string; name: string; costUsd: number }[];
+    `SELECT id, name, costUsd FROM agents`
+  ).all() as { id: string; name: string; costUsd: number }[];
 
   for (const agent of rows) {
+    const agentThreshold = limits?.agentLimits?.[agent.id] ?? globalThreshold;
+    if (agent.costUsd < agentThreshold) continue;
     // Only alert once per agent per threshold crossing (check last 1 hour)
     if (recentAlertExists(agent.id, "cost_spike", 3600000)) continue;
     createAndSendAlert(
       agent.id,
       "cost_spike",
       "warning",
-      `Agent *${agent.name}* exceeded cost threshold — $${agent.costUsd.toFixed(2)} spent (threshold: $${COST_THRESHOLD_USD})`
+      `Agent *${agent.name}* exceeded cost threshold — $${agent.costUsd.toFixed(2)} spent (threshold: $${agentThreshold})`
     );
   }
 }

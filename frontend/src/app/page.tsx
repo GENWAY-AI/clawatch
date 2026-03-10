@@ -180,7 +180,6 @@ export default function LandingPage() {
               <ClaWatchLogo size="md" />
             </div>
             <div className="hidden sm:flex items-center gap-5 text-sm text-gray-400">
-              <a href="#quickstart" className="hover:text-white transition-colors">Quick Start</a>
               <a href="#features" className="hover:text-white transition-colors">Features</a>
               <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
             </div>
@@ -253,39 +252,6 @@ export default function LandingPage() {
       </section>
 
       {/* 3. QUICK START */}
-      <section id="quickstart" className="py-24 px-6 border-t border-white/[0.06]">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-            <span className="text-emerald-400">&#10095;</span> Quick Start
-          </h2>
-          <p className="text-gray-400 mb-12 text-lg">Up and running in under 60 seconds.</p>
-          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            {/* Step 1 */}
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
-              <div className="text-emerald-400 text-sm font-mono mb-3">Step 1</div>
-              <h3 className="text-lg font-semibold mb-2">Install</h3>
-              <p className="text-gray-400 text-sm mb-4">Install the CLI globally via npm.</p>
-              <TerminalBlock copyText="npm install -g clawatch">
-                <div><span className="text-emerald-400">$</span> <span className="text-gray-300">npm install -g clawatch</span></div>
-                <div className="text-gray-500 mt-1">added 1 package in 3s</div>
-              </TerminalBlock>
-            </div>
-            {/* Step 2 */}
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
-              <div className="text-emerald-400 text-sm font-mono mb-3">Step 2</div>
-              <h3 className="text-lg font-semibold mb-2">Start</h3>
-              <p className="text-gray-400 text-sm mb-4">Auto-detects agents, starts monitoring, opens dashboard.</p>
-              <TerminalBlock copyText="clawatch start">
-                <div><span className="text-emerald-400">$</span> <span className="text-gray-300">clawatch start</span></div>
-                <div className="text-gray-500 mt-1">Scanning ~/.openclaw...</div>
-                <div className="text-emerald-400 mt-0.5">&#10003; Found 12 agents, 130 sessions</div>
-                <div className="text-emerald-400 mt-0.5">&#10003; Dashboard → localhost:3001</div>
-              </TerminalBlock>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* 4. WHAT YOU GET */}
       <section id="features" className="py-24 px-6 border-t border-white/[0.06]">
         <div className="max-w-5xl mx-auto">

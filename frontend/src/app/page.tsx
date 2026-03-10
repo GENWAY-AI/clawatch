@@ -86,7 +86,7 @@ const features = [
     ),
   },
   {
-    title: 'Humanized Error Troubleshooting',
+    title: 'Smart Error Insights',
     description: 'No more digging through scattered logs. ClaWatch surfaces errors in plain language with context and suggested fixes.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

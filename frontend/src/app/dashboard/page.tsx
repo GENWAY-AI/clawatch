@@ -999,11 +999,15 @@ function DashboardContent() {
                         <Badge variant="outline" className={`${sc.color} border text-xs`}>
                           {sc.label}
                         </Badge>
-                        {agent.overLimit && (
-                          <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/20 border text-xs">
-                            ⚠️ Over limit
-                          </Badge>
-                        )}
+                        {agent.overLimit && agent.limit != null && (() => {
+                          const spend = agent.limitType === "daily" ? (agent.todaySpend ?? 0) : (agent.mtdSpend ?? 0);
+                          const over = spend - agent.limit;
+                          return (
+                            <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/20 border text-xs">
+                              ⚠️ ${over.toFixed(2)} over
+                            </Badge>
+                          );
+                        })()}
                       </div>
 
                       {/* Stats */}
@@ -1011,32 +1015,7 @@ function DashboardContent() {
                         <div className="text-right min-w-[80px]">
                           <div className="text-foreground font-medium">${agent.costUsd.toFixed(2)}</div>
                           <div className="text-xs">cost</div>
-                          {(agent.todaySpend != null || agent.mtdSpend != null) && (
-                            <div className="text-[11px] text-muted-foreground/60 mt-0.5">
-                              {agent.todaySpend != null && <span>today ${agent.todaySpend.toFixed(2)}</span>}
-                              {agent.todaySpend != null && agent.mtdSpend != null && <span> · </span>}
-                              {agent.mtdSpend != null && <span>mtd ${agent.mtdSpend.toFixed(2)}</span>}
-                            </div>
-                          )}
-                          {agent.limit != null && (
-                            <div className="mt-1 min-w-[80px]">
-                              <div className="text-[11px] text-muted-foreground/60 mb-0.5">
-                                {agent.limitType === "daily" ? "Daily" : "Monthly"}: ${agent.limit}
-                              </div>
-                              <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all ${
-                                    (agent.usagePercent ?? 0) > 80
-                                      ? "bg-red-500"
-                                      : (agent.usagePercent ?? 0) > 60
-                                        ? "bg-amber-500"
-                                        : "bg-emerald-500"
-                                  }`}
-                                  style={{ width: `${Math.min(100, agent.usagePercent ?? 0)}%` }}
-                                />
-                              </div>
-                            </div>
-                          )}
+
                         </div>
                         <div className="text-right min-w-[80px]">
                           <div className="text-foreground font-medium">{formatTokens(agent.tokenCount)}</div>
@@ -1089,22 +1068,46 @@ function DashboardContent() {
                     <CardContent className="pt-4 space-y-3">
                       {costs.byAgent
                         .sort((a, b) => b.costUsd - a.costUsd)
-                        .map((item) => (
-                          <div key={item.agentId} className="flex items-center justify-between">
-                            <span className="text-sm">{item.name}</span>
-                            <div className="flex items-center gap-3">
-                              <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
-                                <div
-                                  className="h-full rounded-full bg-emerald-500"
-                                  style={{ width: `${(item.costUsd / costs.totalUsd) * 100}%` }}
-                                />
+                        .map((item) => {
+                          const agentSpend = spendData?.byAgent[item.agentId];
+                          const agentLimit = spendData?.limits.agentLimits[item.agentId];
+                          const limitType = spendData?.limits.type;
+                          const relevantSpend = limitType === "daily" ? agentSpend?.today : agentSpend?.mtd;
+                          const isOver = agentLimit != null && relevantSpend != null && relevantSpend > agentLimit;
+                          return (
+                            <div key={item.agentId} className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm">{item.name}</span>
+                                  {isOver && (
+                                    <span className="text-[10px] text-red-400 font-medium">⚠️ over limit</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${isOver ? "bg-red-500" : "bg-emerald-500"}`}
+                                      style={{ width: `${(item.costUsd / costs.totalUsd) * 100}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-medium w-16 text-right">
+                                    ${item.costUsd.toFixed(2)}
+                                  </span>
+                                </div>
                               </div>
-                              <span className="text-sm font-medium w-16 text-right">
-                                ${item.costUsd.toFixed(2)}
-                              </span>
+                              {(agentLimit != null || relevantSpend != null) && (
+                                <div className="flex items-center justify-between text-[11px] text-muted-foreground/60 pl-1">
+                                  {relevantSpend != null && (
+                                    <span>{limitType === "daily" ? "Today" : "MTD"}: ${relevantSpend.toFixed(2)}</span>
+                                  )}
+                                  {agentLimit != null && (
+                                    <span>{limitType === "daily" ? "Daily" : "Monthly"} limit: ${agentLimit}</span>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                     </CardContent>
                   </Card>
                 </div>

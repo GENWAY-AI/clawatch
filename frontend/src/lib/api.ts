@@ -1,4 +1,4 @@
-import { Agent, Alert, CostData, Session, SessionDetail, Project, ProjectDetail } from "./types";
+import { Agent, Alert, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail } from "./types";
 import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails } from "./mock-data";
 
 // API_BASE: In the npm CLI, both frontend and API run on different ports.
@@ -33,15 +33,41 @@ export async function getAgents(status?: string): Promise<Agent[]> {
   }
 }
 
-export async function getAlerts(): Promise<Alert[]> {
-  if (USE_MOCK) return mockAlerts;
+export async function getAlerts(params?: {
+  limit?: number;
+  offset?: number;
+  severity?: AlertSeverity;
+  acknowledged?: boolean;
+}): Promise<AlertsResponse> {
+  if (USE_MOCK) {
+    let filtered = [...mockAlerts];
+    if (params?.severity) filtered = filtered.filter((a) => a.severity === params.severity);
+    if (params?.acknowledged !== undefined) filtered = filtered.filter((a) => a.acknowledged === params.acknowledged);
+    const total = filtered.length;
+    const offset = params?.offset ?? 0;
+    const limit = params?.limit ?? filtered.length;
+    return { alerts: filtered.slice(offset, offset + limit), total };
+  }
   try {
-    const data = await fetchJson<{ alerts: Alert[] }>("/api/alerts");
-    return data.alerts;
+    const qs = new URLSearchParams();
+    if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params?.offset !== undefined) qs.set("offset", String(params.offset));
+    if (params?.severity) qs.set("severity", params.severity);
+    if (params?.acknowledged !== undefined) qs.set("acknowledged", String(params.acknowledged));
+    const query = qs.toString();
+    return await fetchJson<AlertsResponse>(`/api/alerts${query ? `?${query}` : ""}`);
   } catch {
     console.warn("API unreachable, falling back to mock data");
-    return mockAlerts;
+    return { alerts: mockAlerts, total: mockAlerts.length };
   }
+}
+
+export async function acknowledgeAllAlerts(severity?: AlertSeverity): Promise<{ ok: boolean; count: number }> {
+  if (USE_MOCK) return { ok: true, count: 0 };
+  return await fetchJson<{ ok: boolean; count: number }>(
+    `/api/alerts/acknowledge-all${severity ? `?severity=${severity}` : ""}`,
+    { method: "POST" }
+  );
 }
 
 export async function getCosts(): Promise<CostData> {

@@ -108,6 +108,11 @@ export interface ProjectDetail {
   timeline: TimelineMessage[];
 }
 
+export interface AlertsResponse {
+  alerts: Alert[];
+  total: number;
+}
+
 export interface TimelineMessage {
   sessionId: string;
   agentId: string;

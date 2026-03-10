@@ -1,4 +1,5 @@
-import Database from "better-sqlite3";
+// @ts-ignore — sql.js ships without declaration files; types are inferred at runtime
+import initSqlJs from "sql.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
@@ -10,15 +11,131 @@ if (!fs.existsSync(CLAWATCH_DIR)) {
 }
 const DB_PATH = path.join(CLAWATCH_DIR, "clawatch.db");
 
-const db: InstanceType<typeof Database> = new Database(DB_PATH);
+let sqlDb: any = null;
+let _inTransaction = false;
 
-// Enable WAL mode for better concurrent read performance
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+function requireDb(): any {
+  if (!sqlDb) throw new Error("Database not initialized — call initDb() first");
+  return sqlDb;
+}
 
-// Auto-init tables immediately (before any imports that call db.prepare)
-function initDb(): void {
-  db.exec(`
+function persistDb(): void {
+  if (!sqlDb) return;
+  fs.writeFileSync(DB_PATH, Buffer.from(sqlDb.export()));
+}
+
+/**
+ * PreparedStatement mimics better-sqlite3's prepared statement API
+ * using sql.js under the hood. Statements are lazy — they only touch
+ * the database when run/get/all is called, not at creation time.
+ */
+class PreparedStatement {
+  constructor(private readonly sql: string) {}
+
+  run(...params: any[]): { changes: number } {
+    const db = requireDb();
+    if (params.length > 0) {
+      db.run(this.sql, params);
+    } else {
+      db.run(this.sql);
+    }
+    const changes = db.getRowsModified();
+    if (!_inTransaction) persistDb();
+    return { changes };
+  }
+
+  get(...params: any[]): any {
+    const db = requireDb();
+    const stmt = db.prepare(this.sql);
+    try {
+      if (params.length > 0) stmt.bind(params);
+      return stmt.step() ? stmt.getAsObject() : undefined;
+    } finally {
+      stmt.free();
+    }
+  }
+
+  all(...params: any[]): any[] {
+    const db = requireDb();
+    const stmt = db.prepare(this.sql);
+    try {
+      if (params.length > 0) stmt.bind(params);
+      const rows: any[] = [];
+      while (stmt.step()) rows.push(stmt.getAsObject());
+      return rows;
+    } finally {
+      stmt.free();
+    }
+  }
+}
+
+/**
+ * Database wrapper providing a better-sqlite3-compatible API
+ * backed by sql.js (pure WASM SQLite — no native compilation needed).
+ *
+ * Why: better-sqlite3 requires native C++ compilation (node-gyp, make, gcc).
+ * This fails on locked-down environments like Synology NAS. sql.js runs
+ * everywhere Node.js runs with zero native dependencies.
+ */
+const db = {
+  prepare(sql: string): PreparedStatement {
+    return new PreparedStatement(sql);
+  },
+
+  exec(sql: string): void {
+    requireDb().exec(sql);
+    if (!_inTransaction) persistDb();
+  },
+
+  pragma(pragma: string): void {
+    try {
+      requireDb().exec(`PRAGMA ${pragma}`);
+    } catch {
+      // Some pragmas (e.g. journal_mode=WAL) are not supported in WASM — ignore gracefully
+    }
+  },
+
+  transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T {
+    return (...args: any[]) => {
+      const db = requireDb();
+      db.exec("BEGIN");
+      _inTransaction = true;
+      try {
+        const result = fn(...args);
+        db.exec("COMMIT");
+        _inTransaction = false;
+        persistDb();
+        return result;
+      } catch (err) {
+        _inTransaction = false;
+        try { db.exec("ROLLBACK"); } catch { /* best effort */ }
+        throw err;
+      }
+    };
+  },
+};
+
+/**
+ * Initialize the sql.js database. Must be called (and awaited) before
+ * any DB operations. Loads existing data from disk or creates a new DB.
+ */
+async function initDb(): Promise<void> {
+  const SQL = await initSqlJs();
+
+  // Load existing DB file or create a new one
+  if (fs.existsSync(DB_PATH)) {
+    const fileBuffer = fs.readFileSync(DB_PATH);
+    sqlDb = new SQL.Database(fileBuffer);
+  } else {
+    sqlDb = new SQL.Database();
+  }
+
+  // Enable foreign keys (WAL mode is not applicable for sql.js — it uses
+  // in-memory storage with manual persist to disk)
+  sqlDb.exec("PRAGMA foreign_keys = ON");
+
+  // Create tables
+  sqlDb.exec(`
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -78,10 +195,10 @@ function initDb(): void {
       updatedAt TEXT NOT NULL
     );
   `);
-}
 
-// Run immediately so tables exist before other modules call db.prepare()
-initDb();
+  persistDb();
+  console.log("[DB] sql.js initialized (pure WASM SQLite — no native deps)");
+}
 
 export { initDb };
 export default db;

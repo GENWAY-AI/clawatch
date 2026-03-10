@@ -99,42 +99,7 @@ async function ensurePort(port: number, label: string): Promise<void> {
   process.exit(1);
 }
 
-// --- Helper: ensure better-sqlite3 native addon is built ---
-function ensureNativeAddon(backendDir: string): void {
-  const bsqlite = path.join(backendDir, 'node_modules', 'better-sqlite3');
-  if (!fs.existsSync(bsqlite)) return;
 
-  // Check if the binding exists
-  const buildDir = path.join(bsqlite, 'build', 'Release');
-  const bindingFile = path.join(buildDir, 'better_sqlite3.node');
-
-  if (!fs.existsSync(bindingFile)) {
-    console.log(chalk.blue('Building native SQLite addon (first run)...'));
-    try {
-      execSync('npm rebuild better-sqlite3', {
-        cwd: backendDir,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 60000,
-      });
-      console.log(chalk.green('  Native addon built successfully'));
-    } catch (err: any) {
-      console.log(chalk.red('  Failed to build native addon. Trying node-gyp directly...'));
-      try {
-        execSync('npx node-gyp rebuild', {
-          cwd: bsqlite,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: 60000,
-        });
-        console.log(chalk.green('  Native addon built successfully'));
-      } catch {
-        console.log(chalk.red('  Could not build better-sqlite3. You may need to install build tools:'));
-        console.log(chalk.yellow('  macOS: xcode-select --install'));
-        console.log(chalk.yellow('  Linux: sudo apt install build-essential python3'));
-        process.exit(1);
-      }
-    }
-  }
-}
 
 const program = new Command();
 
@@ -228,7 +193,6 @@ program
     let backendProcess: ChildProcess | null = null;
 
     if (backendDir) {
-      ensureNativeAddon(backendDir);
       console.log(chalk.blue('Starting backend API...'));
 
       const distIndex = path.join(backendDir, 'dist', 'index.js');

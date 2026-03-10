@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import db from "./db";
 import { listSessions, invalidateCache, discoverProfiles, SessionSummary } from "./sessions";
 
@@ -107,30 +109,76 @@ class UnionFind {
 }
 
 /**
+ * Sample the first N lines of a session's JSONL file to extract text for pattern matching.
+ * Much more reliable than title-only matching since session content contains project references.
+ */
+function sampleSessionContent(sessionId: string, agentId: string): string {
+  const profiles = discoverProfiles();
+  for (const profile of profiles) {
+    const filePath = path.join(profile.dir, "agents", agentId, "sessions", `${sessionId}.jsonl`);
+    if (!fs.existsSync(filePath)) continue;
+
+    try {
+      // Read first 8KB — enough to capture project references without full parse
+      const fd = fs.openSync(filePath, "r");
+      const buffer = Buffer.alloc(8192);
+      const bytesRead = fs.readSync(fd, buffer, 0, 8192, 0);
+      fs.closeSync(fd);
+      return buffer.toString("utf-8", 0, bytesRead);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+/**
  * Auto-detect projects using:
- * 1. Hardcoded pattern matching (first pass, overrides)
+ * 1. Hardcoded pattern matching (first pass — checks title + content sample)
  * 2. Keyword-based Jaccard clustering (second pass, everything else)
  */
 function autoDetectProjects(sessions: SessionSummary[]): Map<string, { name: string; sessionIds: string[] }> {
   const result = new Map<string, { name: string; sessionIds: string[] }>();
   const patternMatched = new Set<string>(); // session IDs matched by patterns
 
-  // --- Pass 1: Hardcoded patterns ---
+  // --- Pass 1: Hardcoded patterns (title first, then content sample) ---
   const patternProjects = new Map<string, { name: string; sessionIds: Set<string> }>();
 
   for (const session of sessions) {
     const title = session.title || "";
-    if (title === "Untitled session" || title.length < 5) continue;
 
-    for (const [pattern, projectName] of PROJECT_PATTERNS) {
-      if (pattern.test(title)) {
-        const projectId = `auto_${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
-        if (!patternProjects.has(projectId)) {
-          patternProjects.set(projectId, { name: projectName, sessionIds: new Set() });
+    // Try title match first (fast path)
+    let matched = false;
+    if (title !== "Untitled session" && title.length >= 5) {
+      for (const [pattern, projectName] of PROJECT_PATTERNS) {
+        if (pattern.test(title)) {
+          const projectId = `auto_${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+          if (!patternProjects.has(projectId)) {
+            patternProjects.set(projectId, { name: projectName, sessionIds: new Set() });
+          }
+          patternProjects.get(projectId)!.sessionIds.add(session.id);
+          patternMatched.add(session.id);
+          matched = true;
+          break;
         }
-        patternProjects.get(projectId)!.sessionIds.add(session.id);
-        patternMatched.add(session.id);
-        break;
+      }
+    }
+
+    // If title didn't match, sample the content (catches "Untitled session" etc.)
+    if (!matched) {
+      const content = sampleSessionContent(session.id, session.agentId);
+      if (content) {
+        for (const [pattern, projectName] of PROJECT_PATTERNS) {
+          if (pattern.test(content)) {
+            const projectId = `auto_${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+            if (!patternProjects.has(projectId)) {
+              patternProjects.set(projectId, { name: projectName, sessionIds: new Set() });
+            }
+            patternProjects.get(projectId)!.sessionIds.add(session.id);
+            patternMatched.add(session.id);
+            break;
+          }
+        }
       }
     }
   }

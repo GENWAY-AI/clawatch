@@ -3,6 +3,7 @@ dotenv.config();
 
 import express from "express";
 import cors from "cors";
+import path from "path";
 import { initDb } from "./db";
 import { initTelegram } from "./telegram";
 import { startAlertChecker } from "./alertChecker";
@@ -12,48 +13,56 @@ import { syncAllData } from "./sync";
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const API_KEY = process.env.API_KEY || "";
 
-const app = express();
+async function main() {
+  // Initialize sql.js database (must complete before any DB operations)
+  await initDb();
 
-app.use(cors());
-app.use(express.json());
+  const app = express();
 
-// API key auth middleware (skip if no API_KEY configured)
-if (API_KEY) {
-  app.use("/api", (req, res, next) => {
-    const key = req.headers["x-clawatch-key"];
-    if (key !== API_KEY) {
-      res.status(401).json({ error: "Invalid or missing API key" });
-      return;
-    }
-    next();
+  app.use(cors());
+  app.use(express.json());
+
+  // API key auth middleware (skip if no API_KEY configured)
+  if (API_KEY) {
+    app.use("/api", (req, res, next) => {
+      const key = req.headers["x-clawatch-key"];
+      if (key !== API_KEY) {
+        res.status(401).json({ error: "Invalid or missing API key" });
+        return;
+      }
+      next();
+    });
+  }
+
+  app.use("/api", routes);
+
+  // Health check
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Serve embedded dashboard
+  app.use(express.static(path.join(__dirname, "..", "public")));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+  });
+
+  // Init services
+  initTelegram();
+
+  // Sync all data from ~/.openclaw JSONL files into DB on startup
+  await syncAllData();
+  startAlertChecker();
+
+  // Re-sync periodically (every 60s) to keep DB in sync with JSONL
+  setInterval(() => syncAllData(), 60_000);
+
+  app.listen(PORT, () => {
+    console.log(`[ClaWatch] Backend running on http://localhost:${PORT}`);
   });
 }
 
-app.use("/api", routes);
-
-// Health check
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-// Serve embedded dashboard
-import path from "path";
-app.use(express.static(path.join(__dirname, "..", "public")));
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "index.html"));
-});
-
-// Init
-initDb();
-initTelegram();
-
-// Sync all data from ~/.openclaw JSONL files into DB on startup
-syncAllData().then(() => {
-  startAlertChecker();
-  // Re-sync periodically (every 60s) to keep DB in sync with JSONL
-  setInterval(() => syncAllData(), 60_000);
-});
-
-app.listen(PORT, () => {
-  console.log(`[ClaWatch] Backend running on http://localhost:${PORT}`);
+main().catch((err) => {
+  console.error("[ClaWatch] Fatal startup error:", err);
+  process.exit(1);
 });

@@ -106,12 +106,12 @@ const features = [
 ];
 
 const providers = [
-  { name: 'OpenClaw', icon: '🦞', status: 'supported' as const },
-  { name: 'NanoClaw', icon: <img src="/providers/nanoclaw.webp" alt="NanoClaw" className="size-7 rounded" />, status: 'supported' as const },
-  { name: 'ZeroClaw', icon: <img src="/providers/zeroclaw.png" alt="ZeroClaw" className="size-7 rounded" />, status: 'coming' as const },
-  { name: 'TrustClaw', icon: <img src="/providers/trustclaw.svg" alt="TrustClaw" className="size-7" />, status: 'coming' as const },
-  { name: 'Nanobot', icon: <img src="/providers/nanobot.png" alt="Nanobot" className="size-7 rounded" />, status: 'coming' as const },
-  { name: 'PicoClaw', icon: <img src="/providers/picoclaw.ico" alt="PicoClaw" className="size-7 rounded" />, status: 'coming' as const },
+  { name: 'OpenClaw', icon: '🦞', status: 'supported' as const, url: 'https://openclaw.ai' },
+  { name: 'NanoClaw', icon: <img src="/providers/nanoclaw.webp" alt="NanoClaw" className="size-7 rounded" />, status: 'supported' as const, url: 'https://nanoclaw.net' },
+  { name: 'ZeroClaw', icon: <img src="/providers/zeroclaw.png" alt="ZeroClaw" className="size-7 rounded" />, status: 'coming' as const, url: 'https://zeroclaw.dev' },
+  { name: 'TrustClaw', icon: <img src="/providers/trustclaw.svg" alt="TrustClaw" className="size-7" />, status: 'coming' as const, url: 'https://trustclaw.com' },
+  { name: 'Nanobot', icon: <img src="/providers/nanobot.png" alt="Nanobot" className="size-7 rounded" />, status: 'coming' as const, url: 'https://nanobot.ai' },
+  { name: 'PicoClaw', icon: <img src="/providers/picoclaw.ico" alt="PicoClaw" className="size-7 rounded" />, status: 'coming' as const, url: 'https://picoclaw.dev' },
 ];
 
 const cliCommands = [
@@ -323,7 +323,7 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {providers.map((p) => (
-              <div key={p.name} className="group relative bg-white/[0.02] border border-white/[0.06] rounded-xl p-6 text-center hover:border-emerald-500/30 hover:scale-[1.02] transition-all duration-200">
+              <a key={p.name} href={p.url} target="_blank" rel="noopener noreferrer" className="group relative bg-white/[0.02] border border-white/[0.06] rounded-xl p-6 text-center hover:border-emerald-500/30 hover:scale-[1.02] transition-all duration-200 block no-underline">
                 <div className="size-12 mx-auto mb-3 rounded-lg bg-white/[0.05] flex items-center justify-center text-2xl">
                   {p.icon}
                 </div>
@@ -335,7 +335,7 @@ export default function LandingPage() {
                 }`}>
                   {p.status === 'supported' ? 'Fully supported' : 'Coming soon'}
                 </span>
-              </div>
+              </a>
             ))}
           </div>
           <p className="text-center text-sm text-gray-500 mt-8">

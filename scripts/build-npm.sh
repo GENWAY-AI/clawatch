@@ -110,9 +110,9 @@ du -sh "$ROOT/cli/dist" "$ROOT/cli/backend" "$ROOT/cli/frontend"
 echo ""
 
 # 7. Dry run
-echo "  Running npm pack (dry run)..."
-cd "$ROOT/cli"
-npm pack --dry-run 2>&1 | tail -5
+# echo "  Running npm pack (dry run)..."
+# cd "$ROOT/cli"
+# npm pack --dry-run 2>&1 | tail -5
 
 echo ""
 echo "✅ Build complete! Run 'cd cli && npm publish --access public' to publish."

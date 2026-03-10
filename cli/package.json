@@ -42,6 +42,7 @@
     "build": "bash ../scripts/build-npm.sh",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
+    "prepack": "npm run build",
     "postinstall": "cd backend && npm rebuild better-sqlite3 2>/dev/null || true"
   },
   "dependencies": {

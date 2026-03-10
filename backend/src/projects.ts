@@ -15,6 +15,9 @@ export interface Project {
 export interface ProjectListItem extends Project {
   sessionCount: number;
   totalCostUsd: number;
+  firstActivityAt: string;
+  lastActivityAt: string;
+  durationMs: number;
 }
 
 export interface ProjectDetail extends Project {
@@ -67,8 +70,10 @@ export function listProjects(): ProjectListItem[] {
     ORDER BY p.updatedAt DESC
   `).all() as any[];
 
-  // We need to calculate costs from session data
-  const sessionCosts = new Map<string, number>();
+  // Aggregate cost + timeline from session data
+  const projectStats = new Map<string, { totalCost: number; firstActivity: string; lastActivity: string }>();
+
+  const allSessions = listSessionsSync();
 
   for (const row of rows) {
     const sessionIds = db.prepare(
@@ -76,29 +81,43 @@ export function listProjects(): ProjectListItem[] {
     ).all(row.id) as { sessionId: string }[];
 
     let totalCost = 0;
-    // We'll get costs from cached session list
-    try {
-      const allSessions = listSessionsSync();
-      for (const { sessionId } of sessionIds) {
-        const s = allSessions.find((s: any) => s.id === sessionId);
-        if (s) totalCost += s.costUsd;
-      }
-    } catch {
-      // If session list fails, cost stays 0
+    let firstActivity = "";
+    let lastActivity = "";
+
+    for (const { sessionId } of sessionIds) {
+      const s = allSessions.find((s: any) => s.id === sessionId);
+      if (!s) continue;
+      totalCost += s.costUsd;
+      if (!firstActivity || s.startedAt < firstActivity) firstActivity = s.startedAt;
+      if (!lastActivity || s.lastActivityAt > lastActivity) lastActivity = s.lastActivityAt;
     }
 
-    sessionCosts.set(row.id, totalCost);
+    projectStats.set(row.id, { totalCost, firstActivity, lastActivity });
   }
 
-  return rows.map((r: any) => ({
-    id: r.id,
-    name: r.name,
-    description: r.description,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-    sessionCount: r.sessionCount,
-    totalCostUsd: sessionCosts.get(r.id) || 0,
-  }));
+  const projects = rows.map((r: any) => {
+    const stats = projectStats.get(r.id) || { totalCost: 0, firstActivity: "", lastActivity: "" };
+    const durationMs = stats.firstActivity && stats.lastActivity
+      ? new Date(stats.lastActivity).getTime() - new Date(stats.firstActivity).getTime()
+      : 0;
+    return {
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      sessionCount: r.sessionCount,
+      totalCostUsd: stats.totalCost,
+      firstActivityAt: stats.firstActivity,
+      lastActivityAt: stats.lastActivity,
+      durationMs,
+    };
+  });
+
+  // Sort by last activity (newest first)
+  projects.sort((a, b) => (b.lastActivityAt || "").localeCompare(a.lastActivityAt || ""));
+
+  return projects;
 }
 
 // Sync wrapper for listSessions (cached)

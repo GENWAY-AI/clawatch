@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -83,7 +83,6 @@ export default function SessionClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [collapsedTools, setCollapsedTools] = useState<Set<string>>(new Set());
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function load() {
@@ -98,12 +97,6 @@ export default function SessionClient() {
     }
     load();
   }, [id]);
-
-  useEffect(() => {
-    if (session && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "instant" });
-    }
-  }, [session?.id]);
 
   function toggleToolCollapse(msgId: string) {
     setCollapsedTools((prev) => {
@@ -266,7 +259,6 @@ export default function SessionClient() {
                 onToggle={() => toggleToolCollapse(msg.id)}
               />
             ))}
-            <div ref={messagesEndRef} />
           </div>
         </div>
       </div>

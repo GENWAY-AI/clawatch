@@ -126,7 +126,7 @@ function extractToolUse(content: any): { name: string; input: string } | null {
   const rawInput = tool.input || tool.arguments || {};
   return {
     name: tool.name || "",
-    input: truncate(typeof rawInput === "string" ? rawInput : JSON.stringify(rawInput), 500),
+    input: typeof rawInput === "string" ? rawInput : JSON.stringify(rawInput),
   };
 }
 
@@ -138,7 +138,7 @@ function extractAllToolCalls(content: any): Array<{ name: string; input: string 
       const rawInput = c.input || c.arguments || {};
       return {
         name: c.name || "unknown",
-        input: truncate(typeof rawInput === "string" ? rawInput : JSON.stringify(rawInput), 500),
+        input: typeof rawInput === "string" ? rawInput : JSON.stringify(rawInput),
       };
     });
 }
@@ -347,7 +347,7 @@ async function parseSessionFile(
           id: parsed.id || `msg-${messageCount}`,
           role,
           timestamp: ts,
-          content: truncate(text, 500),
+          content: text,
         };
 
         if (msg.role === "toolResult" && parsed.toolName) {

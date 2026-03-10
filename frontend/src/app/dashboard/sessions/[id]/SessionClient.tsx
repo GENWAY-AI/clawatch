@@ -60,7 +60,7 @@ function ExpandableText({
       {needsTruncation && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="mt-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+          className="mt-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
         >
           {expanded ? "Show less" : "Show more"}
         </button>
@@ -279,9 +279,9 @@ function MessageBubble({
 
   if (msg.role === "user") {
     return (
-      <div className="relative pl-12">
+      <div className="relative pl-12 flex justify-end">
         <div className="absolute left-3.5 top-3 size-3 rounded-full bg-blue-500 ring-4 ring-background z-10" />
-        <div className={`rounded-lg border border-blue-500/20 bg-blue-500/10 p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+        <div className={`rounded-lg border border-blue-500/20 bg-blue-500/10 p-4 max-w-[80%] ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-blue-400">User</span>
             <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
@@ -296,7 +296,7 @@ function MessageBubble({
     return (
       <div className="relative pl-12">
         <div className="absolute left-3.5 top-3 size-3 rounded-full bg-zinc-500 ring-4 ring-background z-10" />
-        <div className={`rounded-lg border border-border/50 bg-zinc-800/50 p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+        <div className={`rounded-lg border border-border/50 bg-zinc-800/50 p-4 max-w-[80%] ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-zinc-400">Assistant</span>

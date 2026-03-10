@@ -56,6 +56,7 @@ export interface Session {
   startedAt: string;
   lastActivityAt: string;
   duration: number;
+  profile?: string;
 }
 
 export interface SessionDetail extends Session {
@@ -111,6 +112,12 @@ export interface ProjectDetail {
 export interface AlertsResponse {
   alerts: Alert[];
   total: number;
+}
+
+export interface Profile {
+  id: string;
+  name: string;
+  dir: string;
 }
 
 export interface TimelineMessage {

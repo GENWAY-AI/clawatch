@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,38 @@ const sessionStatusConfig: Record<SessionStatus, { color: string; dot: string; l
   idle: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400", label: "Idle" },
   completed: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Completed" },
 };
+
+const TRUNCATE_LIMIT = 500;
+
+function ExpandableText({
+  text,
+  className,
+  preformatted = false,
+}: {
+  text: string;
+  className?: string;
+  preformatted?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const needsTruncation = text.length > TRUNCATE_LIMIT;
+  const displayText = needsTruncation && !expanded ? text.slice(0, TRUNCATE_LIMIT) + "…" : text;
+
+  const Tag = preformatted ? "pre" : "p";
+
+  return (
+    <div>
+      <Tag className={className}>{displayText}</Tag>
+      {needsTruncation && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 const agentColors: Record<string, string> = {
   ofek: "bg-blue-500/10 text-blue-400 border-blue-500/20",
@@ -247,14 +279,14 @@ function MessageBubble({
 
   if (msg.role === "user") {
     return (
-      <div className="relative pl-12">
+      <div className="relative pl-12 flex justify-end">
         <div className="absolute left-3.5 top-3 size-3 rounded-full bg-blue-500 ring-4 ring-background z-10" />
-        <div className={`rounded-lg border border-blue-500/20 bg-blue-500/10 p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+        <div className={`rounded-lg border border-blue-500/20 bg-blue-500/10 p-4 max-w-[80%] ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-blue-400">User</span>
-            <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
+            <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
           </div>
-          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+          <ExpandableText text={msg.content} className="text-sm whitespace-pre-wrap" />
         </div>
       </div>
     );
@@ -264,12 +296,12 @@ function MessageBubble({
     return (
       <div className="relative pl-12">
         <div className="absolute left-3.5 top-3 size-3 rounded-full bg-zinc-500 ring-4 ring-background z-10" />
-        <div className={`rounded-lg border border-border/50 bg-zinc-800/50 p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+        <div className={`rounded-lg border border-border/50 bg-zinc-800/50 p-4 max-w-[80%] ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-zinc-400">Assistant</span>
               {msg.model && <span className="text-[10px] font-mono text-muted-foreground">{msg.model}</span>}
-              <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
+              <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
             </div>
             {msg.costUsd != null && (
               <div className="flex items-center gap-2">
@@ -282,7 +314,7 @@ function MessageBubble({
               </div>
             )}
           </div>
-          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+          <ExpandableText text={msg.content} className="text-sm whitespace-pre-wrap" />
         </div>
       </div>
     );
@@ -301,7 +333,7 @@ function MessageBubble({
                   {msg.toolName}
                 </Badge>
               )}
-              <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
+              <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
             </div>
             <button
               onClick={onToggle}
@@ -311,12 +343,12 @@ function MessageBubble({
             </button>
           </div>
           {msg.toolInput && (
-            <pre className="text-[11px] font-mono text-muted-foreground bg-black/30 rounded px-2 py-1 mb-2 overflow-x-auto">
-              {msg.toolInput}
-            </pre>
+            <div className="bg-black/30 rounded px-2 py-1 mb-2 overflow-x-auto">
+              <ExpandableText text={msg.toolInput} className="text-[11px] font-mono text-muted-foreground" preformatted />
+            </div>
           )}
           {!collapsed && (
-            <pre className="text-xs font-mono text-zinc-300 whitespace-pre-wrap break-all">{msg.content}</pre>
+            <ExpandableText text={msg.content} className="text-xs font-mono text-zinc-300 whitespace-pre-wrap break-all" preformatted />
           )}
         </div>
       </div>
@@ -330,9 +362,9 @@ function MessageBubble({
       <div className="rounded-lg px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-muted-foreground">System</span>
-          <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
+          <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">{msg.content}</p>
+        <ExpandableText text={msg.content} className="text-xs text-muted-foreground mt-1" />
       </div>
     </div>
   );

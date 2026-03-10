@@ -117,11 +117,8 @@ function DashboardContent() {
         getProjects(),
       ]);
       setAgents(a);
-      const hasExpanded = Object.keys(expandedAlertsRef.current).length > 0;
-      if (!hasExpanded) {
-        setAlerts(al.alerts ?? al);
-        setAlertsTotal(al.total ?? 0);
-      }
+      setAlerts(al.alerts ?? al);
+      setAlertsTotal(al.total ?? 0);
       setAllAlerts(allAl.alerts ?? allAl);
       setCosts(c);
       setSessions(s);
@@ -492,7 +489,7 @@ function DashboardContent() {
                 {(["all", "critical", "warning", "info"] as AlertFilter[]).map((f) => (
                   <button
                     key={f}
-                    onClick={() => setAlertFilter(f)}
+                    onClick={() => { setAlertFilter(f); setAlertPage(1); setExpandedAlerts({}); }}
                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                       alertFilter === f
                         ? "bg-emerald-500/10 text-emerald-400"

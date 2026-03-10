@@ -522,6 +522,9 @@ function DashboardContent() {
             }`}
           >
             Active Agents
+            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
+              {agents.length}
+            </Badge>
             {tab === "agents" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
             )}

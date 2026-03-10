@@ -58,8 +58,9 @@ function extractKeywords(title: string): string[] {
 }
 
 // --- Hardcoded pattern overrides (first pass, highest priority) ---
+// These match against session title + agentId for broader coverage
 const PROJECT_PATTERNS: Array<[RegExp, string]> = [
-  [/cla\s*watch|clawatch|datadog.*agent|observability.*agent|agent.*observability/i, "ClaWatch"],
+  [/cla\s*watch|clawatch|datadog.*agent|observability.*agent|agent.*observability|alert.*filter|alert.*pagina|acknowledge.*all|severity.*filter|dashboard.*alert/i, "ClaWatch"],
   [/clawmetry/i, "Clawmetry"],
   [/openclaw/i, "OpenClaw"],
   [/racing.?game|race.*game|game.*race|crossing.*finish/i, "Racing Game"],
@@ -147,11 +148,15 @@ function autoDetectProjects(sessions: SessionSummary[]): Map<string, { name: str
   const invertedIndex: Map<string, number[]> = new Map();
 
   for (const session of sessions) {
+    // Skip sessions already matched by patterns
+    if (patternMatched.has(session.id)) continue;
+
     const title = session.title || "";
     if (title === "Untitled session" || title.length < 5) continue;
 
     const keywords = extractKeywords(title);
-    if (keywords.length === 0) continue;
+    // Need at least 2 keywords for meaningful clustering
+    if (keywords.length < 2) continue;
 
     const idx = sessionIndexToId.length;
     sessionIndexToId.push(session.id);

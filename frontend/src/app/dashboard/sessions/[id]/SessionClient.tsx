@@ -252,7 +252,7 @@ function MessageBubble({
         <div className={`rounded-lg border border-blue-500/20 bg-blue-500/10 p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-blue-400">User</span>
-            <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
+            <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
           </div>
           <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
         </div>
@@ -269,7 +269,7 @@ function MessageBubble({
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-zinc-400">Assistant</span>
               {msg.model && <span className="text-[10px] font-mono text-muted-foreground">{msg.model}</span>}
-              <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
+              <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
             </div>
             {msg.costUsd != null && (
               <div className="flex items-center gap-2">
@@ -301,7 +301,7 @@ function MessageBubble({
                   {msg.toolName}
                 </Badge>
               )}
-              <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
+              <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
             </div>
             <button
               onClick={onToggle}
@@ -330,7 +330,7 @@ function MessageBubble({
       <div className="rounded-lg px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-muted-foreground">System</span>
-          <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
+          <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
         </div>
         <p className="text-xs text-muted-foreground mt-1">{msg.content}</p>
       </div>

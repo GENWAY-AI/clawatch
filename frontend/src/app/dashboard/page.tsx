@@ -1358,6 +1358,9 @@ function DashboardContent() {
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">${avgDailyCost.toFixed(2)}</div>
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">
+                            {analyticsGroupBy === "hour" ? "Last 3 days" : analyticsGroupBy === "week" ? "All weeks" : "All days"}
+                          </div>
                         </CardContent>
                       </Card>
                     </div>

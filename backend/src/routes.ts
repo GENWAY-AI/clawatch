@@ -18,6 +18,12 @@ import {
 
 const router = Router();
 
+// ---------- Shared prepared statements ----------
+const getSetting = db.prepare("SELECT value FROM settings WHERE key = ?");
+const upsertSetting = db.prepare(
+  "INSERT INTO settings (key, value, updatedAt) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt"
+);
+
 // ---------- Profiles ----------
 
 router.get("/profiles", (_req: Request, res: Response) => {
@@ -62,17 +68,44 @@ router.get("/agents", async (_req: Request, res: Response) => {
     : agents.filter((a: any) => a.status === statusFilter);
 
   // Filter by profile: only return agents that have sessions in the selected profile
+  let sessions: SessionSummary[] = [];
+  try {
+    sessions = await listSessions(profileFilter);
+  } catch { /* ignore */ }
+
   if (profileFilter) {
-    try {
-      const sessions = await listSessions(profileFilter);
-      const agentIdsInProfile = new Set(sessions.map((s) => s.agentId));
-      filtered = filtered.filter((a: any) => agentIdsInProfile.has(a.id));
-    } catch {
-      // If profile lookup fails, return unfiltered
-    }
+    const agentIdsInProfile = new Set(sessions.map((s) => s.agentId));
+    filtered = filtered.filter((a: any) => agentIdsInProfile.has(a.id));
   }
 
-  res.json({ agents: filtered });
+  // Enrich with spend data
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const monthStr = now.toISOString().slice(0, 7);
+  const limitsRow = getSetting?.get("cost-limits") as { value: string } | undefined;
+  const limits = limitsRow ? JSON.parse(limitsRow.value) : { type: null, amount: null, agentLimits: {} };
+
+  const enriched = filtered.map((a: any) => {
+    const agentSessions = sessions.filter((s) => s.agentId === a.id);
+    const todaySpend = agentSessions.filter((s) => s.startedAt.slice(0, 10) === todayStr).reduce((sum, s) => sum + s.costUsd, 0);
+    const mtdSpend = agentSessions.filter((s) => s.startedAt.slice(0, 7) === monthStr).reduce((sum, s) => sum + s.costUsd, 0);
+    const agentLimit = limits.agentLimits?.[a.id] ?? limits.amount;
+    const limitType = limits.type;
+    const currentSpend = limitType === "daily" ? todaySpend : limitType === "monthly" ? mtdSpend : null;
+    const usagePercent = agentLimit && currentSpend !== null ? (currentSpend / agentLimit) * 100 : null;
+
+    return {
+      ...a,
+      todaySpend: +todaySpend.toFixed(2),
+      mtdSpend: +mtdSpend.toFixed(2),
+      limit: agentLimit ?? null,
+      limitType,
+      usagePercent: usagePercent !== null ? +usagePercent.toFixed(1) : null,
+      overLimit: usagePercent !== null && usagePercent >= 100,
+    };
+  });
+
+  res.json({ agents: enriched, limits });
 });
 
 router.get("/agents/:id", (req: Request, res: Response) => {
@@ -887,7 +920,11 @@ router.get("/analytics", async (req: Request, res: Response) => {
       })),
     }));
 
-    res.json({ buckets, byAgent, byProject });
+    // Include cost limits for chart reference lines
+    const limitsRow2 = getSetting.get("cost-limits") as { value: string } | undefined;
+    const costLimits = limitsRow2 ? JSON.parse(limitsRow2.value) : null;
+
+    res.json({ buckets, byAgent, byProject, limits: costLimits });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to get analytics" });
   }
@@ -962,11 +999,6 @@ router.delete("/projects/:id/sessions/:sessionId", (req: Request, res: Response)
 
 // ---------- Settings ----------
 
-const getSetting = db.prepare("SELECT value FROM settings WHERE key = ?");
-const upsertSetting = db.prepare(
-  "INSERT INTO settings (key, value, updatedAt) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt"
-);
-
 router.get("/settings/cost-limits", (_req: Request, res: Response) => {
   const row = getSetting.get("cost-limits") as { value: string } | undefined;
   if (!row) {
@@ -1034,6 +1066,8 @@ router.get("/spend", async (req: Request, res: Response) => {
       byAgent,
       limits,
       usagePercent: usagePercent !== null ? +usagePercent.toFixed(1) : null,
+      periodLabel: limits.type === "daily" ? "Daily" : limits.type === "monthly" ? "Monthly" : null,
+      currentSpend: limits.type === "daily" ? +todaySpend.toFixed(2) : limits.type === "monthly" ? +mtdSpend.toFixed(2) : null,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to get spend data" });

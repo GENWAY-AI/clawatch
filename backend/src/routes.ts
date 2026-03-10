@@ -171,10 +171,10 @@ router.post("/events", (req: Request, res: Response) => {
 
 router.get("/costs", async (req: Request, res: Response) => {
   try {
-    const { agentId, from, to } = req.query;
+    const { agentId, from, to, profile } = req.query;
 
     // Get sessions (cached, authoritative source from JSONL files)
-    let sessions = await listSessions();
+    let sessions = await listSessions(profile as string | undefined);
 
     // Apply filters
     if (agentId) {
@@ -231,15 +231,30 @@ router.get("/costs", async (req: Request, res: Response) => {
 
 // ---------- Alerts ----------
 
-router.get("/alerts", (req: Request, res: Response) => {
+router.get("/alerts", async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 5, 1), 100);
   const offset = Math.max(parseInt(req.query.offset as string, 10) || 0, 0);
   const severityParam = req.query.severity as string | undefined;
   const acknowledgedParam = req.query.acknowledged as string | undefined;
   const agentIdParam = req.query.agentId as string | undefined;
+  const profileParam = req.query.profile as string | undefined;
 
   const conditions: string[] = [];
   const params: any[] = [];
+
+  // Profile filter: restrict to agents that belong to this profile
+  if (profileParam) {
+    const sessions = await listSessions(profileParam);
+    const agentIds = [...new Set(sessions.map((s) => s.agentId))];
+    if (agentIds.length > 0) {
+      conditions.push(`agentId IN (${agentIds.map(() => "?").join(", ")})`);
+      params.push(...agentIds);
+    } else {
+      // No agents in this profile — return empty
+      res.json({ alerts: [], total: 0 });
+      return;
+    }
+  }
 
   if (severityParam) {
     const severities = severityParam.split(",").map((s) => s.trim());
@@ -272,12 +287,26 @@ router.get("/alerts", (req: Request, res: Response) => {
   res.json({ alerts, total });
 });
 
-router.post("/alerts/acknowledge-all", (req: Request, res: Response) => {
+router.post("/alerts/acknowledge-all", async (req: Request, res: Response) => {
   const severityParam = req.query.severity as string | undefined;
   const agentIdParam = req.query.agentId as string | undefined;
+  const profileParam = req.query.profile as string | undefined;
 
   const conditions: string[] = ["acknowledged = 0"];
   const params: any[] = [];
+
+  // Profile filter
+  if (profileParam) {
+    const sessions = await listSessions(profileParam);
+    const agentIds = [...new Set(sessions.map((s) => s.agentId))];
+    if (agentIds.length > 0) {
+      conditions.push(`agentId IN (${agentIds.map(() => "?").join(", ")})`);
+      params.push(...agentIds);
+    } else {
+      res.json({ ok: true, count: 0 });
+      return;
+    }
+  }
 
   if (severityParam) {
     const severities = severityParam.split(",").map((s) => s.trim());

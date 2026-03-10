@@ -68,7 +68,5 @@ echo "✅ Both running. Open http://localhost:$FRONTEND_PORT"
 echo "   Press Ctrl+C to stop."
 echo ""
 
-# Wait for either to exit
-wait -n $BACKEND_PID $FRONTEND_PID
-echo "⚠️  A process exited unexpectedly. Shutting down..."
-cleanup
+# Wait forever (cleanup runs via trap on Ctrl+C or if a child dies)
+wait

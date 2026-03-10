@@ -1281,7 +1281,7 @@ function DashboardContent() {
         {/* Analytics Tab */}
         {tab === "analytics" && (
           <div className="space-y-6">
-            {analyticsLoading || !analyticsData ? (
+            {!analyticsData ? (
               <div className="flex items-center justify-center py-20 text-muted-foreground gap-3">
                 <div className="size-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                 Loading analytics...
@@ -1291,6 +1291,9 @@ function DashboardContent() {
                 {/* Time controls */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground mr-1">Group by:</span>
+                  {analyticsLoading && analyticsData && (
+                    <span className="size-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  )}
                   {(["hour", "day", "week"] as const).map((g) => (
                     <button
                       key={g}
@@ -1316,15 +1319,13 @@ function DashboardContent() {
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium text-muted-foreground">
-                            {analyticsGroupBy === "hour" ? "Last 3 Days Cost" : "Period Cost"}
-                          </CardTitle>
+                          <CardTitle className="text-sm font-medium text-muted-foreground">Period Cost</CardTitle>
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">${totalCostPeriod.toFixed(2)}</div>
-                          {analyticsGroupBy === "hour" && (
-                            <div className="text-[11px] text-muted-foreground/60 mt-1">Showing last 3 days only</div>
-                          )}
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">
+                            {analyticsGroupBy === "hour" ? "Last 3 days" : analyticsGroupBy === "week" ? "All weeks" : "All days"}
+                          </div>
                         </CardContent>
                       </Card>
                       <Card>
@@ -1352,7 +1353,7 @@ function DashboardContent() {
                       <Card>
                         <CardHeader className="pb-2">
                           <CardTitle className="text-sm font-medium text-muted-foreground">
-                            {analyticsGroupBy === "hour" ? "Avg Hourly Cost" : "Avg Daily Cost"}
+                            {analyticsGroupBy === "hour" ? "Avg Hourly Cost" : analyticsGroupBy === "week" ? "Avg Weekly Cost" : "Avg Daily Cost"}
                           </CardTitle>
                         </CardHeader>
                         <CardContent>

@@ -1189,7 +1189,7 @@ function DashboardContent() {
                                 const color = projectColors[i % projectColors.length];
                                 const hidden = hiddenProjectSeries.has(proj.name);
                                 return (
-                                  <Area key={proj.projectId} type="monotone" dataKey={proj.name} stackId="1" stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.3} strokeWidth={2} />
+                                  <Area key={proj.projectId} type="monotone" dataKey={proj.name} stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.15} strokeWidth={2} />
                                 );
                               })}
                             </AreaChart>
@@ -1261,7 +1261,7 @@ function DashboardContent() {
                                 const color = agentChartColors[agent.agentId] || defaultColors[i % defaultColors.length];
                                 const hidden = hiddenAgentSeries.has(agent.agentId);
                                 return (
-                                  <Area key={agent.agentId} type="monotone" dataKey={agent.agentId} stackId="1" stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.3} strokeWidth={2} />
+                                  <Area key={agent.agentId} type="monotone" dataKey={agent.agentId} stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.15} strokeWidth={2} />
                                 );
                               })}
                             </AreaChart>

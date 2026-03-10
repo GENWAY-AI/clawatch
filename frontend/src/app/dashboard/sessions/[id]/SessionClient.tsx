@@ -103,7 +103,7 @@ export default function SessionClient() {
     if (session && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "instant" });
     }
-  }, [session]);
+  }, [session?.id]);
 
   function toggleToolCollapse(msgId: string) {
     setCollapsedTools((prev) => {

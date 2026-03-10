@@ -109,7 +109,7 @@ const providers = [
   { name: 'OpenClaw', icon: '🦞', status: 'supported' as const, url: 'https://openclaw.ai' },
   { name: 'NanoClaw', icon: <img src="/providers/nanoclaw.webp" alt="NanoClaw" className="size-7 rounded" />, status: 'supported' as const, url: 'https://nanoclaw.net' },
   { name: 'ZeroClaw', icon: <img src="/providers/zeroclaw.png" alt="ZeroClaw" className="size-7 rounded" />, status: 'coming' as const, url: 'https://zeroclaw.dev' },
-  { name: 'TrustClaw', icon: <img src="/providers/trustclaw.svg" alt="TrustClaw" className="size-7" />, status: 'coming' as const, url: 'https://trustclaw.com' },
+  { name: 'TrustClaw', icon: <img src="/providers/trustclaw.svg" alt="TrustClaw" className="size-7" />, status: 'coming' as const, url: 'https://www.trustclaw.app' },
   { name: 'Nanobot', icon: <img src="/providers/nanobot.png" alt="Nanobot" className="size-7 rounded" />, status: 'coming' as const, url: 'https://nanobot.ai' },
   { name: 'PicoClaw', icon: <img src="/providers/picoclaw.ico" alt="PicoClaw" className="size-7 rounded" />, status: 'coming' as const, url: 'https://picoclaw.dev' },
 ];

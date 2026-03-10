@@ -53,6 +53,73 @@ function checkStuckAgents(): void {
   }
 }
 
+function summarizeErrors(errors: { error: string }[]): string {
+  if (errors.length === 0) return "Unknown error";
+
+  // Count occurrences of each error message
+  const counts = new Map<string, number>();
+  for (const e of errors) {
+    const msg = e.error || "Unknown error";
+    counts.set(msg, (counts.get(msg) || 0) + 1);
+  }
+
+  // Get the most common error
+  let topError = "";
+  let topCount = 0;
+  for (const [msg, cnt] of counts) {
+    if (cnt > topCount) { topError = msg; topCount = cnt; }
+  }
+
+  // Extract a clean, short summary from the error message
+  return extractErrorSummary(topError);
+}
+
+function extractErrorSummary(error: string): string {
+  // Common patterns → human-readable summaries
+  const patterns: [RegExp, string][] = [
+    [/ECONNREFUSED/i, "Connection refused"],
+    [/ECONNRESET/i, "Connection was reset"],
+    [/ETIMEDOUT/i, "Connection timed out"],
+    [/ENOTFOUND/i, "Host not found (DNS failure)"],
+    [/EADDRINUSE/i, "Port already in use"],
+    [/EPERM|EACCES/i, "Permission denied"],
+    [/ENOMEM/i, "Out of memory"],
+    [/rate.?limit/i, "API rate limit exceeded"],
+    [/401|unauthorized/i, "Authentication failed"],
+    [/403|forbidden/i, "Access forbidden"],
+    [/404|not found/i, "Resource not found"],
+    [/500|internal server error/i, "Internal server error"],
+    [/502|bad gateway/i, "Bad gateway"],
+    [/503|service unavailable/i, "Service unavailable"],
+    [/504|gateway timeout/i, "Gateway timeout"],
+    [/timeout/i, "Operation timed out"],
+    [/SQLITE_BUSY/i, "Database is locked"],
+    [/SQLITE_CORRUPT/i, "Database corruption detected"],
+    [/Cannot read propert(y|ies) of (undefined|null)/i, "Null reference error"],
+    [/is not a function/i, "Type error (calling non-function)"],
+    [/JSON\.parse|Unexpected token/i, "Invalid JSON response"],
+    [/CERT_|certificate/i, "SSL certificate error"],
+    [/token.*expir/i, "Authentication token expired"],
+    [/out of.?range|overflow/i, "Value out of range"],
+  ];
+
+  for (const [pattern, summary] of patterns) {
+    if (pattern.test(error)) return summary;
+  }
+
+  // Fallback: extract the error type and first meaningful part
+  // Try "ErrorType: message" format
+  const typeMatch = error.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
+  if (typeMatch) {
+    const msg = typeMatch[2].trim();
+    return msg.length > 80 ? msg.slice(0, 77) + "..." : msg;
+  }
+
+  // Just clean up and truncate
+  const clean = error.replace(/\n.*/s, "").trim();
+  return clean.length > 80 ? clean.slice(0, 77) + "..." : clean;
+}
+
 function checkErrorSpikes(): void {
   const since = new Date(Date.now() - ERROR_SPIKE_WINDOW_MS).toISOString();
   const rows = db.prepare(`
@@ -65,11 +132,26 @@ function checkErrorSpikes(): void {
 
   for (const row of rows) {
     if (recentAlertExists(row.agentId, "error", ERROR_SPIKE_WINDOW_MS)) continue;
+
+    // Fetch actual error messages to generate a specific title
+    const errors = db.prepare(`
+      SELECT data FROM events
+      WHERE agentId = ? AND type = 'error' AND timestamp > ?
+      ORDER BY timestamp DESC
+    `).all(row.agentId, since).map((e: any) => {
+      const parsed = JSON.parse(e.data);
+      return { error: parsed.error || parsed.message || "Unknown error" };
+    });
+
+    const agent = db.prepare("SELECT name FROM agents WHERE id = ?").get(row.agentId) as { name: string } | undefined;
+    const agentName = agent?.name || row.agentId;
+    const errorSummary = summarizeErrors(errors);
+
     createAndSendAlert(
       row.agentId,
       "error",
       "critical",
-      `Error spike detected — ${row.cnt} errors in the last ${Math.round(ERROR_SPIKE_WINDOW_MS / 60000)} minute(s)`
+      `${agentName}: ${errorSummary} (${row.cnt}× in ${Math.round(ERROR_SPIKE_WINDOW_MS / 60000)}min)`
     );
   }
 }

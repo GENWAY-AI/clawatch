@@ -261,6 +261,108 @@ router.post("/alerts/:id/acknowledge", (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// --- Alert summary generation helpers ---
+
+function generateErrorSummary(relatedErrors: { error: string; timestamp: string }[], agentName: string): { summary: string; description: string } {
+  if (relatedErrors.length === 0) {
+    return { summary: "Errors detected", description: `${agentName} encountered errors recently.` };
+  }
+
+  // Group errors by message
+  const groups = new Map<string, { count: number; latest: string }>();
+  for (const e of relatedErrors) {
+    const key = e.error;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count++;
+      if (e.timestamp > existing.latest) existing.latest = e.timestamp;
+    } else {
+      groups.set(key, { count: 1, latest: e.timestamp });
+    }
+  }
+
+  // Find the most frequent error
+  let topError = "";
+  let topCount = 0;
+  for (const [msg, info] of groups) {
+    if (info.count > topCount) { topError = msg; topCount = info.count; }
+  }
+
+  // Pattern-match the top error for a human-readable summary
+  const summary = humanizeError(topError, agentName);
+  const uniqueCount = groups.size;
+  const totalCount = relatedErrors.length;
+
+  let description: string;
+  if (uniqueCount === 1) {
+    description = `${agentName} hit the same error ${totalCount} time${totalCount > 1 ? "s" : ""} recently: "${cleanErrorForDisplay(topError)}". This usually means the agent is stuck retrying a failing operation.`;
+  } else {
+    description = `${agentName} encountered ${totalCount} errors (${uniqueCount} unique) recently. The most common one (${topCount}×) is: "${cleanErrorForDisplay(topError)}".`;
+  }
+
+  return { summary, description };
+}
+
+function humanizeError(error: string, agentName: string): string {
+  const patterns: [RegExp, string][] = [
+    [/ECONNREFUSED.*:(\d+)/i, `${agentName} can't connect (connection refused)`],
+    [/ECONNREFUSED/i, `${agentName} can't connect to a service`],
+    [/ECONNRESET/i, `${agentName} lost connection (reset by remote)`],
+    [/ETIMEDOUT/i, `${agentName} connection timed out`],
+    [/ENOTFOUND\s+(\S+)/i, `${agentName} can't resolve hostname`],
+    [/rate.?limit/i, `${agentName} hit API rate limit`],
+    [/401|unauthorized/i, `${agentName} authentication failed`],
+    [/403|forbidden/i, `${agentName} access denied`],
+    [/404|not found/i, `${agentName} requested a missing resource`],
+    [/500|internal server error/i, `Remote server error for ${agentName}`],
+    [/502|bad gateway/i, `Bad gateway for ${agentName}`],
+    [/503|service unavailable/i, `Service unavailable for ${agentName}`],
+    [/timeout/i, `${agentName} operation timed out`],
+    [/SQLITE_BUSY/i, `${agentName} database is locked`],
+    [/Cannot read propert/i, `${agentName} hit a null reference bug`],
+    [/is not a function/i, `${agentName} hit a type error`],
+    [/JSON\.parse|Unexpected token/i, `${agentName} received invalid data`],
+    [/token.*expir/i, `${agentName} auth token expired`],
+    [/CERT_|certificate/i, `${agentName} SSL certificate error`],
+    [/ENOMEM|out of memory/i, `${agentName} ran out of memory`],
+  ];
+
+  for (const [pattern, summary] of patterns) {
+    if (pattern.test(error)) return summary;
+  }
+
+  // Fallback: extract error type + short message
+  const typeMatch = error.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
+  if (typeMatch) {
+    const shortMsg = typeMatch[2].trim();
+    return shortMsg.length > 60 ? `${agentName}: ${shortMsg.slice(0, 57)}...` : `${agentName}: ${shortMsg}`;
+  }
+
+  const clean = error.replace(/\n.*/s, "").trim();
+  return clean.length > 60 ? `${agentName}: ${clean.slice(0, 57)}...` : `${agentName}: ${clean}`;
+}
+
+function cleanErrorForDisplay(error: string): string {
+  // Strip stack trace, keep just the error message
+  const firstLine = error.split("\n")[0].trim();
+  return firstLine.length > 120 ? firstLine.slice(0, 117) + "..." : firstLine;
+}
+
+function generateStuckSummary(agentName: string, durationMinutes: number): { summary: string; description: string } {
+  return {
+    summary: `${agentName} stopped responding`,
+    description: `${agentName} hasn't sent a heartbeat in ${durationMinutes} minutes. The agent may have crashed, frozen, or lost its connection. It needs to be restarted or investigated.`,
+  };
+}
+
+function generateCostSummary(agentName: string, currentCost: number, threshold: number): { summary: string; description: string } {
+  const overage = currentCost - threshold;
+  return {
+    summary: `${agentName} spending exceeded $${threshold}`,
+    description: `${agentName} has spent $${currentCost.toFixed(2)}, which is $${overage.toFixed(2)} over the $${threshold.toFixed(2)} threshold. This could mean the agent is running longer than expected or processing more data than usual.`,
+  };
+}
+
 router.get("/alerts/:id/details", (req: Request, res: Response) => {
   const alert = db.prepare("SELECT * FROM alerts WHERE id = ?").get(req.params.id) as any;
   if (!alert) {
@@ -273,8 +375,11 @@ router.get("/alerts/:id/details", (req: Request, res: Response) => {
   const agent = db.prepare("SELECT id, name, status, lastHeartbeat, costUsd FROM agents WHERE id = ?")
     .get(alert.agentId) as any;
 
+  const agentName = agent?.name || alert.agentId;
   let relatedErrors: any[] = [];
   let context: any = {};
+  let summary = "";
+  let description = "";
 
   if (alert.type === "error") {
     // Error spike: get the actual error events within the spike window before the alert
@@ -292,17 +397,25 @@ router.get("/alerts/:id/details", (req: Request, res: Response) => {
         raw: parsed,
       };
     });
+
+    const gen = generateErrorSummary(relatedErrors, agentName);
+    summary = gen.summary;
+    description = gen.description;
   } else if (alert.type === "stuck") {
     // Stuck agent: show how long it's been stuck and last heartbeat
     if (agent) {
       const stuckSince = new Date(agent.lastHeartbeat);
       const stuckDurationMs = new Date(alert.timestamp).getTime() - stuckSince.getTime();
+      const stuckMinutes = Math.round(stuckDurationMs / 60000);
       context = {
         lastHeartbeat: agent.lastHeartbeat,
         stuckDurationMs,
-        stuckDurationMinutes: Math.round(stuckDurationMs / 60000),
+        stuckDurationMinutes: stuckMinutes,
         agentStatus: agent.status,
       };
+      const gen = generateStuckSummary(agentName, stuckMinutes);
+      summary = gen.summary;
+      description = gen.description;
     }
   } else if (alert.type === "cost_spike") {
     // Cost threshold: show current spend and threshold
@@ -312,6 +425,9 @@ router.get("/alerts/:id/details", (req: Request, res: Response) => {
       thresholdUsd: COST_THRESHOLD_USD,
       overage: (agent?.costUsd || 0) - COST_THRESHOLD_USD,
     };
+    const gen = generateCostSummary(agentName, agent?.costUsd || 0, COST_THRESHOLD_USD);
+    summary = gen.summary;
+    description = gen.description;
   }
 
   res.json({
@@ -319,6 +435,8 @@ router.get("/alerts/:id/details", (req: Request, res: Response) => {
     agent: agent ? { id: agent.id, name: agent.name, status: agent.status } : null,
     relatedErrors,
     context,
+    summary,
+    description,
   });
 });
 

@@ -64,7 +64,6 @@ function extractKeywords(title: string): string[] {
 const PROJECT_PATTERNS: Array<[RegExp, string]> = [
   [/cla\s*watch|clawatch|datadog.*agent|observability.*agent|agent.*observability|alert.*filter|alert.*pagina|acknowledge.*all|severity.*filter|dashboard.*alert/i, "ClaWatch"],
   [/clawmetry/i, "Clawmetry"],
-  [/openclaw/i, "OpenClaw"],
   [/racing.?game|race.*game|game.*race|crossing.*finish/i, "Racing Game"],
   [/weather.*country|weather.*mvp|weather.*app/i, "Weather App"],
   [/linkedin.*connect|connection.*graph|orggraph/i, "LinkedIn Graph"],

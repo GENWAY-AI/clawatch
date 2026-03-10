@@ -41,17 +41,25 @@ function formatTimeline(first: string, last: string): string {
   return `${fmt(f)} – ${fmt(l)}`;
 }
 
+function parseChartDate(d: string): Date {
+  // Backend sends UTC dates like "2026-03-10T14:00" (no Z suffix) or "2026-03-10"
+  // Append Z to ensure UTC parsing, then toLocale* converts to local time
+  const s = String(d);
+  if (s.includes("T") && !s.endsWith("Z")) return new Date(s + ":00Z");
+  if (!s.includes("T")) return new Date(s + "T00:00:00Z");
+  return new Date(s);
+}
+
 function formatChartDate(d: string, groupBy: string): string {
+  const date = parseChartDate(d);
   if (groupBy === "hour") {
-    // "2026-03-10T14:00" → "Mar 10 14:00"
-    const date = new Date(String(d));
     const month = date.toLocaleDateString("en-US", { month: "short" });
     const day = date.getDate();
     const hours = String(date.getHours()).padStart(2, "0");
     const mins = String(date.getMinutes()).padStart(2, "0");
     return `${month} ${day} ${hours}:${mins}`;
   }
-  return new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function formatTokens(n: number): string {
@@ -1124,7 +1132,7 @@ function DashboardContent() {
                             content={({ active, payload, label }) => {
                               if (!active || !payload?.length) return null;
                               const bucket = analyticsData.buckets.find((b) => b.date === label);
-                              const dateStr = new Date(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                              const dateStr = parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
                               const cost = bucket?.costUsd?.toFixed(2) ?? "0";
                               const tokens = formatTokens(bucket?.tokenCount ?? 0);
                               const sess = bucket?.sessionCount ?? 0;
@@ -1176,7 +1184,7 @@ function DashboardContent() {
                                   if (!visible.length) return null;
                                   return (
                                     <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
-                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{new Date(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
                                       {visible.map((entry) => (
                                         <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
                                           {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}
@@ -1260,7 +1268,7 @@ function DashboardContent() {
                                   if (!visible.length) return null;
                                   return (
                                     <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
-                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{new Date(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
                                       {visible.map((entry) => (
                                         <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
                                           {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}

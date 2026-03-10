@@ -120,12 +120,69 @@ function extractTextContent(content: any): string {
 
 function extractToolUse(content: any): { name: string; input: string } | null {
   if (!Array.isArray(content)) return null;
-  const tool = content.find((c: any) => c.type === "tool_use");
+  // OpenClaw JSONL uses "toolCall" for tool invocations; Anthropic API uses "tool_use"
+  const tool = content.find((c: any) => c.type === "tool_use" || c.type === "toolCall");
   if (!tool) return null;
+  const rawInput = tool.input || tool.arguments || {};
   return {
     name: tool.name || "",
-    input: truncate(typeof tool.input === "string" ? tool.input : JSON.stringify(tool.input || {}), 500),
+    input: typeof rawInput === "string" ? rawInput : JSON.stringify(rawInput),
   };
+}
+
+function extractAllToolCalls(content: any): Array<{ name: string; input: string }> {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((c: any) => c.type === "tool_use" || c.type === "toolCall")
+    .map((c: any) => {
+      const rawInput = c.input || c.arguments || {};
+      return {
+        name: c.name || "unknown",
+        input: typeof rawInput === "string" ? rawInput : JSON.stringify(rawInput),
+      };
+    });
+}
+
+function summarizeToolCall(tool: { name: string; input: string }): string {
+  try {
+    const args = typeof tool.input === "string" ? JSON.parse(tool.input) : tool.input;
+    switch (tool.name) {
+      case "read":
+      case "Read": {
+        const p = args.file_path || args.path || args.filePath || "";
+        return p ? `Read ${shortenPath(p)}` : `Read file`;
+      }
+      case "write":
+      case "Write": {
+        const p = args.file_path || args.path || args.filePath || "";
+        return p ? `Write ${shortenPath(p)}` : `Write file`;
+      }
+      case "edit":
+      case "Edit": {
+        const p = args.file_path || args.path || args.filePath || "";
+        return p ? `Edit ${shortenPath(p)}` : `Edit file`;
+      }
+      case "exec": {
+        const cmd = args.command || "";
+        return cmd ? `Run \`${truncate(cmd, 80)}\`` : `Run command`;
+      }
+      case "sessions_spawn": {
+        const task = args.task || "";
+        return task ? `Spawn: ${truncate(task, 80)}` : `Spawn sub-agent`;
+      }
+      default:
+        return `Called ${tool.name}`;
+    }
+  } catch {
+    return `Called ${tool.name}`;
+  }
+}
+
+function shortenPath(p: string): string {
+  // Show just the filename or last 2 segments for readability
+  const parts = p.split("/").filter(Boolean);
+  if (parts.length <= 2) return p;
+  return parts.slice(-2).join("/");
 }
 
 function isRealUserMessage(text: string): boolean {
@@ -274,14 +331,23 @@ async function parseSessionFile(
         const role: SessionDetailMessage["role"] =
           msg.role === "toolResult" ? "tool" : msg.role === "user" ? "user" : "assistant";
 
-        const text = extractTextContent(msg.content);
+        let text = extractTextContent(msg.content);
         const toolUse = msg.role === "assistant" ? extractToolUse(msg.content) : null;
+
+        // For assistant messages with no text content but with tool calls,
+        // generate descriptive content so they aren't invisible in the UI
+        if (role === "assistant" && !text) {
+          const allTools = extractAllToolCalls(msg.content);
+          if (allTools.length > 0) {
+            text = allTools.map((t) => summarizeToolCall(t)).join("\n");
+          }
+        }
 
         const detailMsg: SessionDetailMessage = {
           id: parsed.id || `msg-${messageCount}`,
           role,
           timestamp: ts,
-          content: truncate(text, 500),
+          content: text,
         };
 
         if (msg.role === "toolResult" && parsed.toolName) {

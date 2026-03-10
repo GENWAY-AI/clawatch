@@ -540,8 +540,13 @@ router.get("/analytics", async (req: Request, res: Response) => {
 
     // Determine date range for zero-filling
     const allKeys = [...totalMap.keys()].sort();
-    let rangeStart = from ? getBucketKey(from) : allKeys[0];
+    let rangeStart = effectiveFrom ? getBucketKey(effectiveFrom) : (from ? getBucketKey(from) : allKeys[0]);
     let rangeEnd = to ? getBucketKey(to) : allKeys[allKeys.length - 1];
+    // For hourly view, always extend to current time so chart isn't cut off
+    if (groupBy === "hour" && !to) {
+      const nowKey = getBucketKey(new Date().toISOString());
+      if (!rangeEnd || nowKey > rangeEnd) rangeEnd = nowKey;
+    }
     if (!rangeStart || !rangeEnd) {
       res.json({ buckets: [], byAgent: [], byProject: [] });
       return;

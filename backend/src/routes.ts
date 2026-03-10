@@ -263,12 +263,21 @@ router.post("/alerts/:id/acknowledge", (req: Request, res: Response) => {
 
 // --- Alert summary generation helpers ---
 
+function isMeaningfulError(error: string): boolean {
+  const cleaned = stripLogPrefix(error).trim();
+  // Filter out JSON fragments, single chars, pure punctuation, etc.
+  if (cleaned.length < 5) return false;
+  if (/^[{}\[\],;:."'\s]+$/.test(cleaned)) return false;
+  if (/^\w+:\s*\d+[,}]?$/.test(cleaned)) return false; // "key: 123"
+  return true;
+}
+
 function generateErrorSummary(relatedErrors: { error: string; timestamp: string }[], agentName: string): { summary: string; description: string } {
   if (relatedErrors.length === 0) {
     return { summary: "Errors detected", description: `${agentName} encountered errors recently.` };
   }
 
-  // Group errors by message
+  // Group errors by message, filtering out meaningless fragments
   const groups = new Map<string, { count: number; latest: string }>();
   for (const e of relatedErrors) {
     const key = e.error;
@@ -281,11 +290,21 @@ function generateErrorSummary(relatedErrors: { error: string; timestamp: string 
     }
   }
 
-  // Find the most frequent error
+  // Find the most frequent *meaningful* error
   let topError = "";
   let topCount = 0;
   for (const [msg, info] of groups) {
-    if (info.count > topCount) { topError = msg; topCount = info.count; }
+    if (info.count > topCount && isMeaningfulError(msg)) {
+      topError = msg;
+      topCount = info.count;
+    }
+  }
+
+  // If no meaningful error found, fall back to any error
+  if (!topError) {
+    for (const [msg, info] of groups) {
+      if (info.count > topCount) { topError = msg; topCount = info.count; }
+    }
   }
 
   // Pattern-match the top error for a human-readable summary
@@ -303,7 +322,23 @@ function generateErrorSummary(relatedErrors: { error: string; timestamp: string 
   return { summary, description };
 }
 
+// Strip common log prefixes: timestamps, log levels, bracketed tags
+function stripLogPrefix(error: string): string {
+  let cleaned = error;
+  // Strip ISO/custom timestamps at start: "2026-03-10T11:40:54.880+02:00 " or "[2026-03-10 ...]"
+  cleaned = cleaned.replace(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[\d.+:ZT-]*\s*/g, "");
+  // Strip bracketed tags: [tools], [ERROR], [warn], etc.
+  cleaned = cleaned.replace(/^\[[\w.-]+\]\s*/g, "");
+  // Strip again (sometimes multiple tags)
+  cleaned = cleaned.replace(/^\[[\w.-]+\]\s*/g, "");
+  // Strip log levels
+  cleaned = cleaned.replace(/^(ERROR|WARN|INFO|DEBUG|FATAL|TRACE)[:\s]+/i, "");
+  return cleaned.trim();
+}
+
 function humanizeError(error: string, agentName: string): string {
+  // Preprocess: strip log timestamps/tags to get the actual error content
+  const cleanedError = stripLogPrefix(error);
   const patterns: [RegExp, string][] = [
     [/ECONNREFUSED.*:(\d+)/i, `${agentName} can't connect (connection refused)`],
     [/ECONNREFUSED/i, `${agentName} can't connect to a service`],
@@ -328,24 +363,28 @@ function humanizeError(error: string, agentName: string): string {
   ];
 
   for (const [pattern, summary] of patterns) {
-    if (pattern.test(error)) return summary;
+    if (pattern.test(cleanedError)) return summary;
   }
 
-  // Fallback: extract error type + short message
-  const typeMatch = error.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
+  // Fallback: extract error type + short message from cleaned error
+  const typeMatch = cleanedError.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
   if (typeMatch) {
     const shortMsg = typeMatch[2].trim();
     return shortMsg.length > 60 ? `${agentName}: ${shortMsg.slice(0, 57)}...` : `${agentName}: ${shortMsg}`;
   }
 
-  const clean = error.replace(/\n.*/s, "").trim();
+  // Use cleaned error (without timestamps/tags) for display
+  const clean = cleanedError.replace(/\n.*/s, "").trim();
+  if (!clean || clean.length < 3) {
+    return `${agentName} encountered errors`;
+  }
   return clean.length > 60 ? `${agentName}: ${clean.slice(0, 57)}...` : `${agentName}: ${clean}`;
 }
 
 function cleanErrorForDisplay(error: string): string {
-  // Strip stack trace, keep just the error message
-  const firstLine = error.split("\n")[0].trim();
-  return firstLine.length > 120 ? firstLine.slice(0, 117) + "..." : firstLine;
+  // Strip log prefixes and stack trace, keep just the meaningful error
+  const cleaned = stripLogPrefix(error.split("\n")[0].trim());
+  return cleaned.length > 120 ? cleaned.slice(0, 117) + "..." : cleaned;
 }
 
 function generateStuckSummary(agentName: string, durationMinutes: number): { summary: string; description: string } {

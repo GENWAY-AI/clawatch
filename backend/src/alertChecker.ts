@@ -74,7 +74,20 @@ function summarizeErrors(errors: { error: string }[]): string {
   return extractErrorSummary(topError);
 }
 
+// Strip common log prefixes: timestamps, log levels, bracketed tags
+function stripLogPrefix(error: string): string {
+  let cleaned = error;
+  cleaned = cleaned.replace(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[\d.+:ZT-]*\s*/g, "");
+  cleaned = cleaned.replace(/^\[[\w.-]+\]\s*/g, "");
+  cleaned = cleaned.replace(/^\[[\w.-]+\]\s*/g, "");
+  cleaned = cleaned.replace(/^(ERROR|WARN|INFO|DEBUG|FATAL|TRACE)[:\s]+/i, "");
+  return cleaned.trim();
+}
+
 function extractErrorSummary(error: string): string {
+  // Strip log timestamps/tags first
+  const cleaned = stripLogPrefix(error);
+
   // Common patterns → human-readable summaries
   const patterns: [RegExp, string][] = [
     [/ECONNREFUSED/i, "Connection refused"],
@@ -104,20 +117,20 @@ function extractErrorSummary(error: string): string {
   ];
 
   for (const [pattern, summary] of patterns) {
-    if (pattern.test(error)) return summary;
+    if (pattern.test(cleaned)) return summary;
   }
 
-  // Fallback: extract the error type and first meaningful part
-  // Try "ErrorType: message" format
-  const typeMatch = error.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
+  // Fallback: extract the error type and first meaningful part from cleaned string
+  const typeMatch = cleaned.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
   if (typeMatch) {
     const msg = typeMatch[2].trim();
     return msg.length > 80 ? msg.slice(0, 77) + "..." : msg;
   }
 
   // Just clean up and truncate
-  const clean = error.replace(/\n.*/s, "").trim();
-  return clean.length > 80 ? clean.slice(0, 77) + "..." : clean;
+  const firstLine = cleaned.replace(/\n.*/s, "").trim();
+  if (!firstLine || firstLine.length < 3) return "Unknown error";
+  return firstLine.length > 80 ? firstLine.slice(0, 77) + "..." : firstLine;
 }
 
 function checkErrorSpikes(): void {

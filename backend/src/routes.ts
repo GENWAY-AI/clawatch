@@ -745,6 +745,153 @@ router.get("/sessions/:id/projects", (req: Request, res: Response) => {
   res.json({ projects });
 });
 
+// ---------- Analytics ----------
+
+router.get("/analytics", async (req: Request, res: Response) => {
+  try {
+    const profile = req.query.profile as string | undefined;
+    const groupBy = (req.query.groupBy as string) || "day";
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+
+    let sessions = await listSessions(profile);
+
+    // For hourly view, default to last 3 days if no from specified
+    let effectiveFrom = from;
+    if (groupBy === "hour" && !from) {
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setUTCDate(threeDaysAgo.getUTCDate() - 3);
+      effectiveFrom = threeDaysAgo.toISOString();
+    }
+
+    // Filter by date range using startedAt
+    if (effectiveFrom) sessions = sessions.filter((s) => s.startedAt >= effectiveFrom!);
+    if (to) sessions = sessions.filter((s) => s.startedAt <= to);
+
+    // Get project tags for all sessions
+    const sessionIds = sessions.map((s) => s.id);
+    const projectTags = bulkGetSessionProjects(sessionIds);
+
+    // Helper: get bucket date key for a session
+    function getBucketKey(dateStr: string): string {
+      const d = new Date(dateStr);
+      if (groupBy === "hour") {
+        return d.toISOString().slice(0, 13) + ":00"; // "2026-03-10T14:00"
+      }
+      if (groupBy === "week") {
+        // ISO week starts on Monday
+        const day = d.getUTCDay();
+        const diff = (day === 0 ? -6 : 1) - day; // adjust to Monday
+        const monday = new Date(d);
+        monday.setUTCDate(monday.getUTCDate() + diff);
+        return monday.toISOString().slice(0, 10);
+      }
+      return d.toISOString().slice(0, 10);
+    }
+
+    // Helper: generate all date keys between min and max
+    function generateAllKeys(minDate: string, maxDate: string): string[] {
+      const keys: string[] = [];
+      const current = new Date(minDate);
+      const end = new Date(maxDate);
+      while (current <= end) {
+        if (groupBy === "hour") {
+          keys.push(current.toISOString().slice(0, 13) + ":00");
+          current.setUTCHours(current.getUTCHours() + 1);
+        } else if (groupBy === "week") {
+          keys.push(current.toISOString().slice(0, 10));
+          current.setUTCDate(current.getUTCDate() + 7);
+        } else {
+          keys.push(current.toISOString().slice(0, 10));
+          current.setUTCDate(current.getUTCDate() + 1);
+        }
+      }
+      return keys;
+    }
+
+    // Aggregate into buckets
+    type Bucket = { costUsd: number; tokenCount: number; sessionCount: number };
+    const totalMap = new Map<string, Bucket>();
+    const agentMap = new Map<string, Map<string, Bucket>>();
+    const projectMap = new Map<string, { name: string; buckets: Map<string, Bucket> }>();
+
+    for (const s of sessions) {
+      const key = getBucketKey(s.startedAt);
+
+      // Total
+      const tb = totalMap.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+      tb.costUsd += s.costUsd;
+      tb.tokenCount += s.tokenCount;
+      tb.sessionCount += 1;
+      totalMap.set(key, tb);
+
+      // By agent
+      if (!agentMap.has(s.agentId)) agentMap.set(s.agentId, new Map());
+      const ab = agentMap.get(s.agentId)!.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+      ab.costUsd += s.costUsd;
+      ab.tokenCount += s.tokenCount;
+      ab.sessionCount += 1;
+      agentMap.get(s.agentId)!.set(key, ab);
+
+      // By project (session can belong to multiple projects)
+      const projects = projectTags.get(s.id) || [];
+      for (const p of projects) {
+        if (!projectMap.has(p.id)) projectMap.set(p.id, { name: p.name, buckets: new Map() });
+        const pb = projectMap.get(p.id)!.buckets.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+        pb.costUsd += s.costUsd;
+        pb.tokenCount += s.tokenCount;
+        pb.sessionCount += 1;
+        projectMap.get(p.id)!.buckets.set(key, pb);
+      }
+    }
+
+    // Determine date range for zero-filling
+    const allKeys = [...totalMap.keys()].sort();
+    let rangeStart = effectiveFrom ? getBucketKey(effectiveFrom) : (from ? getBucketKey(from) : allKeys[0]);
+    let rangeEnd = to ? getBucketKey(to) : allKeys[allKeys.length - 1];
+    // For hourly view, always extend to current time so chart isn't cut off
+    if (groupBy === "hour" && !to) {
+      const nowKey = getBucketKey(new Date().toISOString());
+      if (!rangeEnd || nowKey > rangeEnd) rangeEnd = nowKey;
+    }
+    if (!rangeStart || !rangeEnd) {
+      res.json({ buckets: [], byAgent: [], byProject: [] });
+      return;
+    }
+
+    const allDates = generateAllKeys(rangeStart, rangeEnd);
+    const zeroBucket = { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+
+    // Build response with zero-filled buckets
+    const buckets = allDates.map((date) => ({
+      date,
+      ...(totalMap.get(date) || zeroBucket),
+    }));
+
+    const byAgent = [...agentMap.entries()].map(([agentId, bMap]) => ({
+      agentId,
+      name: agentId,
+      buckets: allDates.map((date) => ({
+        date,
+        ...(bMap.get(date) || zeroBucket),
+      })),
+    }));
+
+    const byProject = [...projectMap.entries()].map(([projectId, { name, buckets: bMap }]) => ({
+      projectId,
+      name,
+      buckets: allDates.map((date) => ({
+        date,
+        ...(bMap.get(date) || zeroBucket),
+      })),
+    }));
+
+    res.json({ buckets, byAgent, byProject });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to get analytics" });
+  }
+});
+
 // ---------- Projects ----------
 
 router.post("/projects", (req: Request, res: Response) => {

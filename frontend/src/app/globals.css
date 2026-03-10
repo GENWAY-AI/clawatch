@@ -4,6 +4,28 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Remove recharts chart area white border on click/focus */
+.recharts-wrapper,
+.recharts-wrapper *,
+.recharts-surface,
+.recharts-surface * {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+/* Kill the background rect border that appears on click */
+svg.recharts-surface > rect {
+  stroke: none !important;
+  stroke-width: 0 !important;
+}
+.recharts-cartesian-grid-bg {
+  fill: none !important;
+  stroke: none !important;
+}
+/* Hide the white cursor line on hover */
+.recharts-tooltip-cursor {
+  stroke: #27272a !important;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

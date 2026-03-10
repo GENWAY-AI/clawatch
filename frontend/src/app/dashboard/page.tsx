@@ -6,9 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile } from "@/lib/types";
-import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject } from "@/lib/api";
+import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile, AnalyticsData } from "@/lib/types";
+import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -38,6 +39,27 @@ function formatTimeline(first: string, last: string): string {
   const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   if (f.toDateString() === l.toDateString()) return fmt(f);
   return `${fmt(f)} – ${fmt(l)}`;
+}
+
+function parseChartDate(d: string): Date {
+  // Backend sends UTC dates like "2026-03-10T14:00" (no Z suffix) or "2026-03-10"
+  // Append Z to ensure UTC parsing, then toLocale* converts to local time
+  const s = String(d);
+  if (s.includes("T") && !s.endsWith("Z")) return new Date(s + ":00Z");
+  if (!s.includes("T")) return new Date(s + "T00:00:00Z");
+  return new Date(s);
+}
+
+function formatChartDate(d: string, groupBy: string): string {
+  const date = parseChartDate(d);
+  if (groupBy === "hour") {
+    const month = date.toLocaleDateString("en-US", { month: "short" });
+    const day = date.getDate();
+    const hours = String(date.getHours()).padStart(2, "0");
+    const mins = String(date.getMinutes()).padStart(2, "0");
+    return `${month} ${day} ${hours}:${mins}`;
+  }
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function formatTokens(n: number): string {
@@ -74,7 +96,7 @@ const severityConfig: Record<AlertSeverity, { color: string; icon: string }> = {
   info: { color: "bg-blue-500/10 text-blue-400 border-blue-500/20", icon: "i" },
 };
 
-type Tab = "agents" | "sessions" | "projects";
+type Tab = "agents" | "sessions" | "projects" | "analytics";
 type SessionFilter = "all" | "active" | "idle" | "completed";
 type SessionSort = "recent" | "cost" | "tokens";
 type AlertFilter = "all" | "critical" | "warning" | "info";
@@ -264,7 +286,7 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab") as Tab | null;
-  const [tab, setTabRaw] = useState<Tab>(tabParam && ["agents", "sessions", "projects"].includes(tabParam) ? tabParam : "agents");
+  const [tab, setTabRaw] = useState<Tab>(tabParam && ["agents", "sessions", "projects", "analytics"].includes(tabParam) ? tabParam : "agents");
 
   function setTab(t: Tab) {
     setTabRaw(t);
@@ -306,8 +328,14 @@ function DashboardContent() {
   const [showStackTrace, setShowStackTrace] = useState<Record<string, boolean>>({});
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [version, setVersion] = useState<string | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [analyticsAllTime, setAnalyticsAllTime] = useState<{ totalTokens: number; totalSessions: number } | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [hiddenAgentSeries, setHiddenAgentSeries] = useState<Set<string>>(new Set());
+  const [hiddenProjectSeries, setHiddenProjectSeries] = useState<Set<string>>(new Set());
 
   const selectedProfile = searchParams.get("profile") || "default";
+  const analyticsGroupBy = (searchParams.get("groupBy") as "hour" | "day" | "week") || "day";
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
   const sessionPage = Math.max(1, parseInt(searchParams.get("sessionPage") || "1", 10));
@@ -376,6 +404,46 @@ function DashboardContent() {
     params.delete("sessionPage");
     router.replace(`?${params.toString()}`, { scroll: false });
   }
+
+  function setAnalyticsGroupByParam(g: "hour" | "day" | "week") {
+    const params = new URLSearchParams(searchParams.toString());
+    if (g === "day") {
+      params.delete("groupBy");
+    } else {
+      params.set("groupBy", g);
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  // Fetch analytics data only when the Analytics tab is active
+  useEffect(() => {
+    if (tab !== "analytics") return;
+    let cancelled = false;
+    setAnalyticsLoading(true);
+    const fetches: Promise<void>[] = [
+      getAnalytics({ profile: selectedProfile, groupBy: analyticsGroupBy }).then((data) => {
+        if (!cancelled) setAnalyticsData(data);
+      }),
+    ];
+    // When in hourly mode (3 days only), also fetch all-time stats for tokens/sessions
+    if (analyticsGroupBy === "hour") {
+      fetches.push(
+        getAnalytics({ profile: selectedProfile, groupBy: "day" }).then((allTime) => {
+          if (!cancelled) {
+            const totalTokens = allTime.buckets.reduce((s, b) => s + b.tokenCount, 0);
+            const totalSessions = allTime.buckets.reduce((s, b) => s + b.sessionCount, 0);
+            setAnalyticsAllTime({ totalTokens, totalSessions });
+          }
+        })
+      );
+    } else {
+      setAnalyticsAllTime(null);
+    }
+    Promise.all(fetches).catch(() => {}).finally(() => {
+      if (!cancelled) setAnalyticsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [tab, selectedProfile, analyticsGroupBy]);
 
   useEffect(() => {
     Promise.all([getProfiles(), getVersion()]).then(([p, v]) => {
@@ -667,6 +735,19 @@ function DashboardContent() {
               {projects.length}
             </Badge>
             {tab === "projects" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
+            )}
+          </button>
+          <button
+            onClick={() => setTab("analytics")}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${
+              tab === "analytics"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Analytics
+            {tab === "analytics" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
             )}
           </button>
@@ -1193,6 +1274,294 @@ function DashboardContent() {
                   Next
                 </Button>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {tab === "analytics" && (
+          <div className="space-y-6">
+            {!analyticsData ? (
+              <div className="flex items-center justify-center py-20 text-muted-foreground gap-3">
+                <div className="size-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                Loading analytics...
+              </div>
+            ) : (
+              <>
+                {/* Time controls */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground mr-1">Group by:</span>
+                  {analyticsLoading && analyticsData && (
+                    <span className="size-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  )}
+                  {(["hour", "day", "week"] as const).map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setAnalyticsGroupByParam(g)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        analyticsGroupBy === g
+                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                          : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
+                      }`}
+                    >
+                      {g === "hour" ? "Hours" : g === "day" ? "Days" : "Weeks"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Summary stats */}
+                {(() => {
+                  const totalCostPeriod = analyticsData.buckets.reduce((s, b) => s + b.costUsd, 0);
+                  const totalTokens = analyticsData.buckets.reduce((s, b) => s + b.tokenCount, 0);
+                  const totalSessions = analyticsData.buckets.reduce((s, b) => s + b.sessionCount, 0);
+                  const avgDailyCost = analyticsData.buckets.length > 0 ? totalCostPeriod / analyticsData.buckets.length : 0;
+                  return (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">Period Cost</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">${totalCostPeriod.toFixed(2)}</div>
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">
+                            {analyticsGroupBy === "hour" ? "Last 3 days" : "All time"}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">Total Tokens</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">{formatTokens(analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalTokens : totalTokens)}</div>
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">Total Sessions</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">{analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalSessions : totalSessions}</div>
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            {analyticsGroupBy === "hour" ? "Avg Hourly Cost" : analyticsGroupBy === "week" ? "Avg Weekly Cost" : "Avg Daily Cost"}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">${avgDailyCost.toFixed(2)}</div>
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">
+                            {analyticsGroupBy === "hour" ? "Last 3 days" : "All time"}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  );
+                })()}
+
+                {/* Total usage over time */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold">Total Usage Over Time</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={analyticsData.buckets}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                          <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
+                          <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
+                          <Tooltip
+                            content={({ active, payload, label }) => {
+                              if (!active || !payload?.length) return null;
+                              const bucket = analyticsData.buckets.find((b) => b.date === label);
+                              const dateStr = parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                              const cost = bucket?.costUsd?.toFixed(2) ?? "0";
+                              const tokens = formatTokens(bucket?.tokenCount ?? 0);
+                              const sess = bucket?.sessionCount ?? 0;
+                              return (
+                                <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
+                                  <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{dateStr}</div>
+                                  <div style={{ color: "#e4e4e7", fontSize: 13 }}>{"Cost: $"}{cost}</div>
+                                  <div style={{ color: "#a1a1aa", fontSize: 12 }}>{"Tokens: "}{tokens}</div>
+                                  <div style={{ color: "#a1a1aa", fontSize: 12 }}>{"Sessions: "}{sess}</div>
+                                </div>
+                              );
+                            }}
+                          />
+                          <Area type="monotone" dataKey="costUsd" stroke="#10b981" fill="#10b981" fillOpacity={0.3} strokeWidth={2} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Usage by Project — moved under Total per Gal's request */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold">Usage by Project</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {(() => {
+                          const projectColors = ["#f59e0b", "#ef4444", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1"];
+                          const dates = analyticsData.buckets.map((b) => b.date);
+                          const merged = dates.map((date) => {
+                            const row: Record<string, string | number> = { date };
+                            for (const proj of analyticsData.byProject) {
+                              const bucket = proj.buckets.find((b) => b.date === date);
+                              row[proj.name] = bucket?.costUsd ?? 0;
+                            }
+                            return row;
+                          });
+                          return (
+                            <AreaChart data={merged}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
+                              <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
+                              <Tooltip
+                                content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null;
+                                  const visible = payload.filter((p) => !hiddenProjectSeries.has(String(p.dataKey)));
+                                  if (!visible.length) return null;
+                                  return (
+                                    <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      {visible.map((entry) => (
+                                        <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
+                                          {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                }}
+                              />
+                              <Legend
+                                wrapperStyle={{ color: "#a1a1aa", fontSize: 12, cursor: "pointer" }}
+                                onClick={(e, _idx, event) => {
+                                  const key = String(e.dataKey);
+                                  const allKeys = analyticsData!.byProject.map((p) => p.name);
+                                  const nativeEvent = (event as unknown as React.MouseEvent)?.nativeEvent ?? event;
+                                  const isMulti = (nativeEvent as MouseEvent)?.metaKey || (nativeEvent as MouseEvent)?.ctrlKey;
+                                  setHiddenProjectSeries((prev) => {
+                                    if (isMulti) {
+                                      const next = new Set(prev);
+                                      if (next.has(key)) next.delete(key); else next.add(key);
+                                      return next;
+                                    }
+                                    // Single click: if this is the only visible one, show all; otherwise solo it
+                                    const visible = allKeys.filter((k) => !prev.has(k));
+                                    if (visible.length === 1 && visible[0] === key) return new Set();
+                                    return new Set(allKeys.filter((k) => k !== key));
+                                  });
+                                }}
+                                formatter={(value) => (
+                                  <span style={{ color: hiddenProjectSeries.has(String(value)) ? "#52525b" : "#a1a1aa", textDecoration: hiddenProjectSeries.has(String(value)) ? "line-through" : "none" }}>{String(value)}</span>
+                                )}
+                              />
+                              {analyticsData.byProject.map((proj, i) => {
+                                const color = projectColors[i % projectColors.length];
+                                const hidden = hiddenProjectSeries.has(proj.name);
+                                return (
+                                  <Area key={proj.projectId} type="monotone" dataKey={proj.name} stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.15} strokeWidth={2} />
+                                );
+                              })}
+                            </AreaChart>
+                          );
+                        })()}
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Usage by Agent */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold">Usage by Agent</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {(() => {
+                          const agentChartColors: Record<string, string> = {
+                            ofek: "#3b82f6",
+                            anas: "#a855f7",
+                            dor: "#14b8a6",
+                          };
+                          const defaultColors = ["#6366f1", "#ec4899", "#f59e0b", "#84cc16", "#06b6d4"];
+                          const dates = analyticsData.buckets.map((b) => b.date);
+                          const merged = dates.map((date) => {
+                            const row: Record<string, string | number> = { date };
+                            for (const agent of analyticsData.byAgent) {
+                              const bucket = agent.buckets.find((b) => b.date === date);
+                              row[agent.agentId] = bucket?.costUsd ?? 0;
+                            }
+                            return row;
+                          });
+                          return (
+                            <AreaChart data={merged}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
+                              <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
+                              <Tooltip
+                                content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null;
+                                  const visible = payload.filter((p) => !hiddenAgentSeries.has(String(p.dataKey)));
+                                  if (!visible.length) return null;
+                                  return (
+                                    <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      {visible.map((entry) => (
+                                        <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
+                                          {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                }}
+                              />
+                              <Legend
+                                wrapperStyle={{ color: "#a1a1aa", fontSize: 12, cursor: "pointer" }}
+                                onClick={(e, _idx, event) => {
+                                  const key = String(e.dataKey);
+                                  const allKeys = analyticsData!.byAgent.map((a) => a.agentId);
+                                  const nativeEvent = (event as unknown as React.MouseEvent)?.nativeEvent ?? event;
+                                  const isMulti = (nativeEvent as MouseEvent)?.metaKey || (nativeEvent as MouseEvent)?.ctrlKey;
+                                  setHiddenAgentSeries((prev) => {
+                                    if (isMulti) {
+                                      const next = new Set(prev);
+                                      if (next.has(key)) next.delete(key); else next.add(key);
+                                      return next;
+                                    }
+                                    const visible = allKeys.filter((k) => !prev.has(k));
+                                    if (visible.length === 1 && visible[0] === key) return new Set();
+                                    return new Set(allKeys.filter((k) => k !== key));
+                                  });
+                                }}
+                                formatter={(value) => (
+                                  <span style={{ color: hiddenAgentSeries.has(String(value)) ? "#52525b" : "#a1a1aa", textDecoration: hiddenAgentSeries.has(String(value)) ? "line-through" : "none" }}>{String(value)}</span>
+                                )}
+                              />
+                              {analyticsData.byAgent.map((agent, i) => {
+                                const color = agentChartColors[agent.agentId] || defaultColors[i % defaultColors.length];
+                                const hidden = hiddenAgentSeries.has(agent.agentId);
+                                return (
+                                  <Area key={agent.agentId} type="monotone" dataKey={agent.agentId} stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.15} strokeWidth={2} />
+                                );
+                              })}
+                            </AreaChart>
+                          );
+                        })()}
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
             )}
           </div>
         )}

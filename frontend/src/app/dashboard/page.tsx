@@ -1082,10 +1082,15 @@ function DashboardContent() {
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium text-muted-foreground">Period Cost</CardTitle>
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            {analyticsGroupBy === "hour" ? "Last 3 Days Cost" : "Period Cost"}
+                          </CardTitle>
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">${totalCostPeriod.toFixed(2)}</div>
+                          {analyticsGroupBy === "hour" && (
+                            <div className="text-[11px] text-muted-foreground/60 mt-1">Showing last 3 days only</div>
+                          )}
                         </CardContent>
                       </Card>
                       <Card>
@@ -1106,7 +1111,9 @@ function DashboardContent() {
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium text-muted-foreground">Avg Daily Cost</CardTitle>
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            {analyticsGroupBy === "hour" ? "Avg Hourly Cost" : "Avg Daily Cost"}
+                          </CardTitle>
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">${avgDailyCost.toFixed(2)}</div>

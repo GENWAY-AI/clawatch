@@ -41,6 +41,19 @@ function formatTimeline(first: string, last: string): string {
   return `${fmt(f)} – ${fmt(l)}`;
 }
 
+function formatChartDate(d: string, groupBy: string): string {
+  if (groupBy === "hour") {
+    // "2026-03-10T14:00" → "Mar 10 14:00"
+    const date = new Date(String(d));
+    const month = date.toLocaleDateString("en-US", { month: "short" });
+    const day = date.getDate();
+    const hours = String(date.getHours()).padStart(2, "0");
+    const mins = String(date.getMinutes()).padStart(2, "0");
+    return `${month} ${day} ${hours}:${mins}`;
+  }
+  return new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
@@ -230,7 +243,7 @@ function DashboardContent() {
   const [hiddenProjectSeries, setHiddenProjectSeries] = useState<Set<string>>(new Set());
 
   const selectedProfile = searchParams.get("profile") || "default";
-  const analyticsGroupBy = (searchParams.get("groupBy") as "day" | "week") || "day";
+  const analyticsGroupBy = (searchParams.get("groupBy") as "hour" | "day" | "week") || "day";
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
   const sessionPage = Math.max(1, parseInt(searchParams.get("sessionPage") || "1", 10));
@@ -298,7 +311,7 @@ function DashboardContent() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
-  function setAnalyticsGroupByParam(g: "day" | "week") {
+  function setAnalyticsGroupByParam(g: "hour" | "day" | "week") {
     const params = new URLSearchParams(searchParams.toString());
     if (g === "day") {
       params.delete("groupBy");
@@ -1036,7 +1049,7 @@ function DashboardContent() {
                 {/* Time controls */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground mr-1">Group by:</span>
-                  {(["day", "week"] as const).map((g) => (
+                  {(["hour", "day", "week"] as const).map((g) => (
                     <button
                       key={g}
                       onClick={() => setAnalyticsGroupByParam(g)}
@@ -1046,7 +1059,7 @@ function DashboardContent() {
                           : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
                       }`}
                     >
-                      {g.charAt(0).toUpperCase() + g.slice(1)}
+                      {g === "hour" ? "Hours" : g === "day" ? "Days" : "Weeks"}
                     </button>
                   ))}
                 </div>
@@ -1105,7 +1118,7 @@ function DashboardContent() {
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={analyticsData.buckets}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                          <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                          <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
                           <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                           <Tooltip
                             content={({ active, payload, label }) => {
@@ -1154,7 +1167,7 @@ function DashboardContent() {
                           return (
                             <AreaChart data={merged}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                               <Tooltip
                                 content={({ active, payload, label }) => {
@@ -1238,7 +1251,7 @@ function DashboardContent() {
                           return (
                             <AreaChart data={merged}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                               <Tooltip
                                 content={({ active, payload, label }) => {

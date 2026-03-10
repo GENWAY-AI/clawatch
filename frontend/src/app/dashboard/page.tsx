@@ -155,6 +155,8 @@ function DashboardContent() {
 
   const unackedAlerts = allAlerts.filter((a) => !a.acknowledged);
   const criticalAlerts = unackedAlerts.filter((a) => a.severity === "critical" || a.severity === "warning");
+  const bannerAlerts = criticalAlerts.slice(0, 3);
+  const hiddenBannerCount = criticalAlerts.length - bannerAlerts.length;
   const runningCount = agents.filter((a) => a.status === "running" || a.status === "active").length;
   const totalCost = costs?.totalUsd ?? 0;
 
@@ -229,9 +231,9 @@ function DashboardContent() {
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Alert Banner */}
-        {criticalAlerts.length > 0 && (
+        {bannerAlerts.length > 0 && (
           <div className="space-y-2">
-            {criticalAlerts.map((alert) => (
+            {bannerAlerts.map((alert) => (
               <div
                 key={alert.id}
                 className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${
@@ -257,6 +259,17 @@ function DashboardContent() {
                 </Button>
               </div>
             ))}
+            {hiddenBannerCount > 0 && (
+              <button
+                onClick={() => {
+                  const alertsSection = document.getElementById("alerts-section");
+                  if (alertsSection) alertsSection.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors px-4 py-1.5"
+              >
+                +{hiddenBannerCount} more alert{hiddenBannerCount > 1 ? "s" : ""} — view all below ↓
+              </button>
+            )}
           </div>
         )}
 
@@ -484,7 +497,7 @@ function DashboardContent() {
             )}
 
             {/* All Alerts */}
-            <div>
+            <div id="alerts-section">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold">All Alerts</h2>
                 <Button

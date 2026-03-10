@@ -199,7 +199,7 @@ program
       const srcIndex = path.join(backendDir, 'src', 'index.ts');
 
       if (fs.existsSync(distIndex)) {
-        backendProcess = spawn('node', [distIndex], {
+        backendProcess = spawn('node', ['--no-deprecation', distIndex], {
           cwd: backendDir,
           env: { ...process.env, PORT: BACKEND_PORT },
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -219,8 +219,35 @@ program
       });
       backendProcess.stderr?.on('data', (d: Buffer) => {
         const line = d.toString().trim();
-        if (line && !line.includes('ExperimentalWarning')) console.log(chalk.red(`  [api] ${line}`));
+        if (line && !line.includes('ExperimentalWarning') && !line.includes('DEP0060') && !line.includes('DeprecationWarning')) {
+          console.log(chalk.red(`  [api] ${line}`));
+        }
       });
+
+      // Wait for backend to be ready before starting frontend (prevents ECONNREFUSED)
+      console.log(chalk.blue('Waiting for backend API...'));
+      let backendReady = false;
+      for (let i = 0; i < 30; i++) {
+        try {
+          const http = require('http');
+          await new Promise<void>((resolve, reject) => {
+            const req = http.get(`http://localhost:${BACKEND_PORT}/api/version`, { timeout: 1000 }, (res: any) => {
+              res.resume();
+              resolve();
+            });
+            req.on('error', reject);
+            req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+          });
+          backendReady = true;
+          console.log(chalk.green('  Backend API ready'));
+          break;
+        } catch {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+      if (!backendReady) {
+        console.log(chalk.yellow('  Backend API slow to start — continuing anyway'));
+      }
     } else {
       console.log(chalk.yellow('Backend not found — using configured URL: ' + config.backendUrl));
     }
@@ -234,7 +261,7 @@ program
       const serverJs = fs.existsSync(proxyServer) ? proxyServer : path.join(frontendDir, 'server.js');
       if (fs.existsSync(serverJs)) {
         console.log(chalk.blue('Starting dashboard...'));
-        frontendProcess = spawn('node', [serverJs], {
+        frontendProcess = spawn('node', ['--no-deprecation', serverJs], {
           cwd: frontendDir,
           env: {
             ...process.env,
@@ -250,7 +277,9 @@ program
         });
         frontendProcess.stderr?.on('data', (d: Buffer) => {
           const line = d.toString().trim();
-          if (line && !line.includes('ExperimentalWarning')) console.log(chalk.red(`  [dashboard] ${line}`));
+          if (line && !line.includes('ExperimentalWarning') && !line.includes('DEP0060') && !line.includes('DeprecationWarning') && !line.includes('ECONNREFUSED')) {
+            console.log(chalk.red(`  [dashboard] ${line}`));
+          }
         });
       }
     }

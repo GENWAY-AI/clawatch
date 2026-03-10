@@ -1,4 +1,4 @@
-import { Agent, Alert, AlertDetails, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile } from "./types";
+import { Agent, Alert, AlertDetails, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile, AnalyticsData } from "./types";
 import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails, mockAlertDetails } from "./mock-data";
 
 // API_BASE: In the npm CLI, both frontend and API run on different ports.
@@ -272,4 +272,65 @@ export async function removeSessionProject(sessionId: string, projectId: string)
   await fetchJson(`/api/sessions/${sessionId}/projects/${projectId}`, {
     method: "DELETE",
   });
+}
+
+const mockAnalytics: AnalyticsData = (() => {
+  const dates = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date("2026-02-24");
+    d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+  const buckets = dates.map((date) => ({
+    date,
+    costUsd: +(5 + Math.random() * 15).toFixed(2),
+    tokenCount: Math.floor(1_000_000 + Math.random() * 4_000_000),
+    sessionCount: Math.floor(3 + Math.random() * 10),
+  }));
+  const agentIds = ["ofek", "anas", "dor"];
+  const byAgent = agentIds.map((agentId) => ({
+    agentId,
+    buckets: dates.map((date) => ({
+      date,
+      costUsd: +(1 + Math.random() * 6).toFixed(2),
+      tokenCount: Math.floor(300_000 + Math.random() * 1_500_000),
+      sessionCount: Math.floor(1 + Math.random() * 4),
+    })),
+  }));
+  const projectNames = [
+    { projectId: "proj-1", name: "ClaWatch" },
+    { projectId: "proj-2", name: "Auth Service" },
+    { projectId: "proj-3", name: "Mobile App" },
+  ];
+  const byProject = projectNames.map(({ projectId, name }) => ({
+    projectId,
+    name,
+    buckets: dates.map((date) => ({
+      date,
+      costUsd: +(1 + Math.random() * 5).toFixed(2),
+      tokenCount: Math.floor(200_000 + Math.random() * 1_200_000),
+      sessionCount: Math.floor(1 + Math.random() * 3),
+    })),
+  }));
+  return { buckets, byAgent, byProject };
+})();
+
+export async function getAnalytics(params: {
+  profile?: string;
+  groupBy?: string;
+  from?: string;
+  to?: string;
+}): Promise<AnalyticsData> {
+  if (USE_MOCK) return mockAnalytics;
+  try {
+    const qs = new URLSearchParams();
+    if (params.profile) qs.set("profile", params.profile);
+    if (params.groupBy) qs.set("groupBy", params.groupBy);
+    if (params.from) qs.set("from", params.from);
+    if (params.to) qs.set("to", params.to);
+    const query = qs.toString();
+    return await fetchJson<AnalyticsData>(`/api/analytics${query ? `?${query}` : ""}`);
+  } catch {
+    console.warn("API unreachable, falling back to mock analytics data");
+    return mockAnalytics;
+  }
 }

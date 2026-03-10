@@ -161,3 +161,27 @@ export interface TimelineMessage {
   model?: string;
   costUsd?: number;
 }
+
+export interface AnalyticsBucket {
+  date: string;
+  costUsd: number;
+  tokenCount: number;
+  sessionCount: number;
+}
+
+export interface AgentAnalytics {
+  agentId: string;
+  buckets: AnalyticsBucket[];
+}
+
+export interface ProjectAnalytics {
+  projectId: string;
+  name: string;
+  buckets: AnalyticsBucket[];
+}
+
+export interface AnalyticsData {
+  buckets: AnalyticsBucket[];
+  byAgent: AgentAnalytics[];
+  byProject: ProjectAnalytics[];
+}

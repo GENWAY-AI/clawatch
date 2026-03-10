@@ -1,7 +1,9 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuid } from "uuid";
+import * as fs from "fs";
+import * as path from "path";
 import db from "./db";
-import { listSessions, getSessionDetail, SessionSummary } from "./sessions";
+import { listSessions, getSessionDetail, discoverProfiles, SessionSummary } from "./sessions";
 import {
   createProject,
   listProjects,
@@ -13,16 +15,58 @@ import {
 
 const router = Router();
 
+// ---------- Profiles ----------
+
+router.get("/profiles", (_req: Request, res: Response) => {
+  const profiles = discoverProfiles();
+  res.json({ profiles });
+});
+
+// ---------- Version ----------
+
+router.get("/version", (_req: Request, res: Response) => {
+  const candidates = [
+    path.join(__dirname, "..", "..", "cli", "package.json"),  // dev/source
+    path.join(__dirname, "..", "package.json"),               // bundled in CLI
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        const pkg = JSON.parse(fs.readFileSync(candidate, "utf-8"));
+        if (pkg.version) {
+          res.json({ version: pkg.version });
+          return;
+        }
+      }
+    } catch {
+      // try next
+    }
+  }
+  res.json({ version: "unknown" });
+});
+
 // ---------- Agents ----------
 
-router.get("/agents", (_req: Request, res: Response) => {
+router.get("/agents", async (_req: Request, res: Response) => {
   const statusFilter = (_req.query.status as string) || "active";
+  const profileFilter = _req.query.profile as string | undefined;
   const agents = db.prepare("SELECT * FROM agents ORDER BY costUsd DESC").all() as any[];
 
   // Filter by status
-  const filtered = statusFilter === "all"
+  let filtered = statusFilter === "all"
     ? agents
     : agents.filter((a: any) => a.status === statusFilter);
+
+  // Filter by profile: only return agents that have sessions in the selected profile
+  if (profileFilter) {
+    try {
+      const sessions = await listSessions(profileFilter);
+      const agentIdsInProfile = new Set(sessions.map((s) => s.agentId));
+      filtered = filtered.filter((a: any) => agentIdsInProfile.has(a.id));
+    } catch {
+      // If profile lookup fails, return unfiltered
+    }
+  }
 
   res.json({ agents: filtered });
 });
@@ -265,7 +309,8 @@ router.post("/alerts/:id/acknowledge", (req: Request, res: Response) => {
 
 router.get("/sessions", async (req: Request, res: Response) => {
   try {
-    let sessions = await listSessions();
+    const profileFilter = req.query.profile as string | undefined;
+    let sessions = await listSessions(profileFilter);
 
     // Filter by agentId
     const { agentId, status, sort, limit } = req.query;
@@ -301,7 +346,8 @@ router.get("/sessions", async (req: Request, res: Response) => {
 
 router.get("/sessions/:id", async (req: Request, res: Response) => {
   try {
-    const detail = await getSessionDetail(req.params.id as string);
+    const profileFilter = req.query.profile as string | undefined;
+    const detail = await getSessionDetail(req.params.id as string, profileFilter);
     if (!detail) {
       res.status(404).json({ error: "Session not found" });
       return;

@@ -152,6 +152,7 @@ export async function getProjectDetail(projectId: string): Promise<ProjectDetail
       sessions.push({
         id: detail.id,
         agentId: detail.agentId,
+        profile: detail.profile,
         title: detail.title,
         status: detail.status,
         costUsd: detail.costUsd,

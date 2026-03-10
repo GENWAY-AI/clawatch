@@ -518,7 +518,7 @@ function DashboardContent() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Agents
+            Active Agents
             {tab === "agents" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
             )}
@@ -563,7 +563,7 @@ function DashboardContent() {
             {/* Agent List */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Agents</h2>
+                <h2 className="text-lg font-semibold">Active Agents</h2>
                 <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
                   <input
                     type="checkbox"
@@ -634,6 +634,13 @@ function DashboardContent() {
                     </div>
                   );
                 })}
+                {agents.length === 0 && (
+                  <div className="rounded-xl border border-border/50 bg-card p-12 text-center">
+                    <div className="text-4xl mb-3">😴</div>
+                    <div className="text-sm font-medium text-muted-foreground">No active agents</div>
+                    <div className="text-xs text-muted-foreground/60 mt-1">All agents are idle or stopped. Check back soon!</div>
+                  </div>
+                )}
               </div>
             </div>
 

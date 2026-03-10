@@ -835,8 +835,8 @@ function DashboardContent() {
                 {(["all", "critical", "warning", "info"] as AlertFilter[]).map((f) => (
                   <button
                     key={f}
-                    onClick={() => { setAlertFilter(f); setAlertPage(1); setExpandedAlerts({}); setShowStackTrace({}); }}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    onClick={() => { setAlertFilter(f); }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                       alertFilter === f
                         ? "bg-emerald-500/10 text-emerald-400"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted/50"

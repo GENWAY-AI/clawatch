@@ -50,36 +50,26 @@ function TerminalBlock({ children, copyText }: { children: React.ReactNode; copy
 
 const features = [
   {
-    title: 'Real-time Monitoring',
-    description: 'See every heartbeat, tool call, and token across all agents. Live updates, zero delay.',
+    title: 'Cost Monitoring & Thresholds',
+    description: 'Track spend per agent in real-time. Set daily or monthly limits with automatic alerts when thresholds are approached or exceeded.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.64 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.64 0-8.573-3.007-9.963-7.178z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
       </svg>
     ),
   },
   {
-    title: 'Smart Alerts',
-    description: 'Telegram notifications for stuck agents, errors, cost spikes. Never miss a critical issue.',
+    title: 'Smart Alerts to Your Phone',
+    description: 'Get instant notifications for stuck agents, errors, cost spikes, and anomalies. Telegram, Slack, or webhook — your choice.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
       </svg>
     ),
   },
   {
-    title: 'Cost Tracking',
-    description: 'Per-agent, per-model cost breakdown. Know your spend before the invoice hits.',
-    icon: (
-      <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Pause / Resume',
-    description: 'One-click control. Stop a runaway agent instantly, resume when ready.',
+    title: 'Control Agents from Anywhere',
+    description: 'Pause, resume, or stop agents directly from the dashboard or your phone. One click, instant effect.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
@@ -87,23 +77,41 @@ const features = [
     ),
   },
   {
-    title: 'Open Source',
-    description: 'MIT licensed. Self-host or use our managed service. Full transparency, no lock-in.',
+    title: 'Unified Session View',
+    description: 'Group sessions into projects for a bird\'s-eye view. See cost, timeline, and agent breakdown across related work.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
       </svg>
     ),
   },
   {
-    title: 'Zero Config',
-    description: 'Auto-detects OpenClaw. One command to start monitoring. No YAML, no setup files.',
+    title: 'Smart Error Insights',
+    description: 'No more digging through scattered logs. ClaWatch surfaces errors in plain language with context and suggested fixes.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
       </svg>
     ),
   },
+  {
+    title: 'Multi-Profile Support',
+    description: 'Monitor multiple OpenClaw installations from one dashboard. Switch profiles instantly — dev, staging, production.',
+    icon: (
+      <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+      </svg>
+    ),
+  },
+];
+
+const providers = [
+  { name: 'OpenClaw', icon: '🦞', status: 'supported' as const, url: 'https://openclaw.ai' },
+  { name: 'NanoClaw', icon: <img src="/providers/nanoclaw.webp" alt="NanoClaw" className="size-7 rounded" />, status: 'supported' as const, url: 'https://nanoclaw.net' },
+  { name: 'ZeroClaw', icon: <img src="/providers/zeroclaw.png" alt="ZeroClaw" className="size-7 rounded" />, status: 'coming' as const, url: 'https://zeroclaw.dev' },
+  { name: 'TrustClaw', icon: <img src="/providers/trustclaw.svg" alt="TrustClaw" className="size-7" />, status: 'coming' as const, url: 'https://www.trustclaw.app' },
+  { name: 'Nanobot', icon: <img src="/providers/nanobot.png" alt="Nanobot" className="size-7 rounded" />, status: 'coming' as const, url: 'https://nanobot.ai' },
+  { name: 'PicoClaw', icon: <img src="/providers/picoclaw.ico" alt="PicoClaw" className="size-7 rounded" />, status: 'coming' as const, url: 'https://picoclaw.dev' },
 ];
 
 const cliCommands = [
@@ -172,14 +180,13 @@ export default function LandingPage() {
               <ClaWatchLogo size="md" />
             </div>
             <div className="hidden sm:flex items-center gap-5 text-sm text-gray-400">
-              <a href="#quickstart" className="hover:text-white transition-colors">Quick Start</a>
               <a href="#features" className="hover:text-white transition-colors">Features</a>
               <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <a
-              href="https://github.com/clawatch"
+              href="https://github.com/GENWAY-AI/clawatch"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -224,7 +231,7 @@ export default function LandingPage() {
                 Get Started
               </Button>
             </Link>
-            <a href="https://github.com/clawatch" target="_blank" rel="noopener noreferrer">
+            <a href="https://github.com/GENWAY-AI/clawatch" target="_blank" rel="noopener noreferrer">
               <Button variant="outline" size="lg" className="h-12 px-8 text-base gap-2 border-white/[0.1] bg-transparent hover:bg-white/[0.05] text-gray-300 hover:text-white font-medium">
                 <svg className="size-5" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
@@ -245,39 +252,6 @@ export default function LandingPage() {
       </section>
 
       {/* 3. QUICK START */}
-      <section id="quickstart" className="py-24 px-6 border-t border-white/[0.06]">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-            <span className="text-emerald-400">&#10095;</span> Quick Start
-          </h2>
-          <p className="text-gray-400 mb-12 text-lg">Up and running in under 60 seconds.</p>
-          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            {/* Step 1 */}
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
-              <div className="text-emerald-400 text-sm font-mono mb-3">Step 1</div>
-              <h3 className="text-lg font-semibold mb-2">Install</h3>
-              <p className="text-gray-400 text-sm mb-4">Install the CLI globally via npm.</p>
-              <TerminalBlock copyText="npm install -g clawatch">
-                <div><span className="text-emerald-400">$</span> <span className="text-gray-300">npm install -g clawatch</span></div>
-                <div className="text-gray-500 mt-1">added 1 package in 3s</div>
-              </TerminalBlock>
-            </div>
-            {/* Step 2 */}
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
-              <div className="text-emerald-400 text-sm font-mono mb-3">Step 2</div>
-              <h3 className="text-lg font-semibold mb-2">Start</h3>
-              <p className="text-gray-400 text-sm mb-4">Auto-detects agents, starts monitoring, opens dashboard.</p>
-              <TerminalBlock copyText="clawatch start">
-                <div><span className="text-emerald-400">$</span> <span className="text-gray-300">clawatch start</span></div>
-                <div className="text-gray-500 mt-1">Scanning ~/.openclaw...</div>
-                <div className="text-emerald-400 mt-0.5">&#10003; Found 12 agents, 130 sessions</div>
-                <div className="text-emerald-400 mt-0.5">&#10003; Dashboard → localhost:3001</div>
-              </TerminalBlock>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* 4. WHAT YOU GET */}
       <section id="features" className="py-24 px-6 border-t border-white/[0.06]">
         <div className="max-w-5xl mx-auto">
@@ -301,6 +275,41 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* WORKS WITH YOUR STACK */}
+      <section className="py-24 px-6 border-t border-white/[0.06]">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">Works with Your Stack</h2>
+            <p className="text-lg text-gray-400 max-w-2xl mx-auto">
+              ClaWatch auto-detects your agent framework. Full support today, more coming soon.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {providers.map((p) => (
+              <a key={p.name} href={p.url} target="_blank" rel="noopener noreferrer" className="group relative bg-white/[0.02] border border-white/[0.06] rounded-xl p-6 text-center hover:border-emerald-500/30 hover:scale-[1.02] transition-all duration-200 block no-underline">
+                <div className="size-12 mx-auto mb-3 rounded-lg bg-white/[0.05] flex items-center justify-center text-2xl">
+                  {p.icon}
+                </div>
+                <div className="font-semibold mb-2">{p.name}</div>
+                <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  p.status === 'supported'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                }`}>
+                  {p.status === 'supported' ? 'Fully supported' : 'Coming soon'}
+                </span>
+              </a>
+            ))}
+          </div>
+          <p className="text-center text-sm text-gray-500 mt-8">
+            Want support for your framework?{' '}
+            <a href="https://github.com/GENWAY-AI/clawatch/issues" className="text-emerald-400 hover:text-emerald-300 transition-colors">
+              Request it →
+            </a>
+          </p>
         </div>
       </section>
 
@@ -411,13 +420,13 @@ export default function LandingPage() {
             <span className="text-gray-500">&mdash; Open Source AI Agent Observability</span>
           </div>
           <div className="flex items-center gap-6">
-            <a href="https://github.com/clawatch" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+            <a href="https://github.com/GENWAY-AI/clawatch" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
               GitHub
             </a>
             <Link href="/dashboard" className="hover:text-white transition-colors">
               Dashboard
             </Link>
-            <a href="https://github.com/clawatch" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+            <a href="https://github.com/GENWAY-AI/clawatch" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
               Docs
             </a>
           </div>

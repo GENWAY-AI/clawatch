@@ -433,6 +433,14 @@ async function listSessionsForDir(dir: string, profileId: string): Promise<Sessi
   return allSessions;
 }
 
+/** Sync cache read for alert checker — returns cached sessions or empty array */
+export function listSessionsSync(profile?: string): SessionSummary[] {
+  const cacheKey = profile || "__all__";
+  const cached = sessionCache.get(cacheKey);
+  if (cached) return cached.sessions;
+  return [];
+}
+
 export async function listSessions(profile?: string): Promise<SessionSummary[]> {
   const cacheKey = profile || "__all__";
   const now = Date.now();

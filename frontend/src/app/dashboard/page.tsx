@@ -62,6 +62,84 @@ type AlertFilter = "all" | "critical" | "warning" | "info";
 
 const ALERTS_PER_PAGE = 5;
 
+// --- Human-readable alert helpers ---
+
+interface AggregatedAlert {
+  /** The most recent alert in this group */
+  alert: Alert;
+  /** How many times this alert occurred */
+  count: number;
+  /** All alert IDs in this group (for acknowledging) */
+  ids: string[];
+}
+
+function aggregateAlerts(alerts: Alert[]): AggregatedAlert[] {
+  const groups = new Map<string, AggregatedAlert>();
+  for (const alert of alerts) {
+    // Group by: same type + same agentId + same severity
+    const key = `${alert.type}::${alert.agentId}::${alert.severity}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count++;
+      existing.ids.push(alert.id);
+      // Keep the most recent one
+      if (new Date(alert.timestamp) > new Date(existing.alert.timestamp)) {
+        existing.alert = alert;
+      }
+    } else {
+      groups.set(key, { alert, count: 1, ids: [alert.id] });
+    }
+  }
+  // Sort by most recent first
+  return Array.from(groups.values()).sort(
+    (a, b) => new Date(b.alert.timestamp).getTime() - new Date(a.alert.timestamp).getTime()
+  );
+}
+
+function getHumanTitle(alert: Alert, details?: AlertDetails | null): string {
+  if (details?.title) return details.title;
+  // Fallback: use alert.message (now contains specific error text from backend)
+  const msg = alert.message;
+  if (msg.length > 60) return msg.substring(0, 57) + "...";
+  return msg;
+}
+
+function getHumanDescription(alert: Alert, details: AlertDetails | null): string {
+  // Prefer backend-provided description (specific to actual error content)
+  if (details?.description) return details.description;
+  // Fallback: generic descriptions by type
+  switch (alert.type) {
+    case "stuck": {
+      const mins = details?.context?.stuckDurationMinutes;
+      const name = details?.agent?.name || "An agent";
+      return mins
+        ? `${name} hasn't responded for ${mins} minutes, which usually means it's frozen or crashed.`
+        : `${name} stopped sending heartbeats, which usually means it's frozen or crashed.`;
+    }
+    case "error": {
+      const name = details?.agent?.name || "An agent";
+      const errCount = details?.relatedErrors?.length || 0;
+      return errCount > 1
+        ? `${name} encountered ${errCount} errors recently, which may indicate a recurring problem that needs attention.`
+        : `${name} encountered errors recently that may need attention.`;
+    }
+    case "cost_spike": {
+      const name = details?.agent?.name || "An agent";
+      const current = details?.context?.currentCostUsd;
+      const threshold = details?.context?.thresholdUsd;
+      return current && threshold
+        ? `${name} has spent $${current.toFixed(2)}, which is above the $${threshold.toFixed(2)} threshold. This could indicate excessive API usage.`
+        : `${name} exceeded its cost threshold, which could indicate excessive API usage.`;
+    }
+    case "loop_detected": {
+      const name = details?.agent?.name || "An agent";
+      return `${name} appears to be producing the same output repeatedly, suggesting it's stuck in a retry loop.`;
+    }
+    default:
+      return "An issue was detected that may need your attention.";
+  }
+}
+
 export default function DashboardPage() {
   return (
     <Suspense fallback={
@@ -97,6 +175,8 @@ function DashboardContent() {
   const [expandedAlerts, setExpandedAlerts] = useState<Record<string, AlertDetails | "loading">>({});
   const expandedAlertsRef = useRef(expandedAlerts);
   expandedAlertsRef.current = expandedAlerts;
+  const [prefetchedDetails, setPrefetchedDetails] = useState<Record<string, AlertDetails>>({});
+  const [showStackTrace, setShowStackTrace] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -134,11 +214,33 @@ function DashboardContent() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // Auto-fetch details for visible alerts so titles show immediately
+  useEffect(() => {
+    if (alerts.length === 0) return;
+    let cancelled = false;
+    const fetchDetails = async () => {
+      for (const alert of alerts) {
+        if (cancelled) break;
+        // Skip if already prefetched or expanded
+        if (prefetchedDetails[alert.id] || expandedAlertsRef.current[alert.id]) continue;
+        try {
+          const details = await getAlertDetails(alert.id);
+          if (!cancelled) {
+            setPrefetchedDetails((prev) => ({ ...prev, [alert.id]: details }));
+          }
+        } catch {
+          // Silently skip failed prefetches
+        }
+      }
+    };
+    fetchDetails();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alerts]);
+
   const unackedAlerts = allAlerts.filter((a) => !a.acknowledged);
-  const criticalAlerts = unackedAlerts.filter((a) => a.severity === "critical" || a.severity === "warning");
-  const bannerAlerts = criticalAlerts.slice(0, 3);
-  const hiddenBannerCount = criticalAlerts.length - bannerAlerts.length;
   const runningCount = agents.filter((a) => a.status === "running" || a.status === "active").length;
+  const aggregatedAlerts = aggregateAlerts(alerts);
   const totalCost = costs?.totalUsd ?? 0;
 
   async function handlePauseResume(agent: Agent) {
@@ -190,9 +292,19 @@ function DashboardContent() {
         delete next[alertId];
         return next;
       });
+      setShowStackTrace((prev) => {
+        const next = { ...prev };
+        delete next[alertId];
+        return next;
+      });
       return;
     }
-    // Expand — fetch details
+    // Expand — use prefetched if available, otherwise fetch
+    const prefetched = prefetchedDetails[alertId];
+    if (prefetched) {
+      setExpandedAlerts((prev) => ({ ...prev, [alertId]: prefetched }));
+      return;
+    }
     setExpandedAlerts((prev) => ({ ...prev, [alertId]: "loading" }));
     try {
       const details = await getAlertDetails(alertId);
@@ -489,7 +601,7 @@ function DashboardContent() {
                 {(["all", "critical", "warning", "info"] as AlertFilter[]).map((f) => (
                   <button
                     key={f}
-                    onClick={() => { setAlertFilter(f); setAlertPage(1); setExpandedAlerts({}); }}
+                    onClick={() => { setAlertFilter(f); setAlertPage(1); setExpandedAlerts({}); setShowStackTrace({}); }}
                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                       alertFilter === f
                         ? "bg-emerald-500/10 text-emerald-400"
@@ -503,12 +615,14 @@ function DashboardContent() {
 
               <Card>
                 <CardContent className="pt-4 space-y-2">
-                  {alerts.map((alert) => {
+                  {aggregatedAlerts.map(({ alert, count, ids }) => {
                     const sc = severityConfig[alert.severity];
                     const expanded = expandedAlerts[alert.id];
                     const isExpanded = !!expanded;
                     const isLoading = expanded === "loading";
-                    const details = expanded && expanded !== "loading" ? expanded : null;
+                    const details = expanded && expanded !== "loading" ? expanded : prefetchedDetails[alert.id] || null;
+                    const isStackVisible = showStackTrace[alert.id] || false;
+                    const humanTitle = getHumanTitle(alert, details);
                     return (
                       <div
                         key={alert.id}
@@ -533,10 +647,12 @@ function DashboardContent() {
                             <Badge variant="outline" className={`${sc.color} border text-[10px] uppercase font-bold`}>
                               {alert.severity}
                             </Badge>
-                            <Badge variant="outline" className="text-[10px] uppercase">
-                              {alert.type.replace("_", " ")}
-                            </Badge>
-                            <span>{alert.message}</span>
+                            <span className="font-medium">{humanTitle}</span>
+                            {count > 1 && (
+                              <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                                ×{count}
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="text-xs text-muted-foreground">
@@ -546,9 +662,12 @@ function DashboardContent() {
                               <Button
                                 variant="ghost"
                                 size="xs"
-                                onClick={(e) => { e.stopPropagation(); handleAcknowledge(alert.id); }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  ids.forEach((id) => handleAcknowledge(id));
+                                }}
                               >
-                                Ack
+                                Ack{count > 1 ? ` all` : ""}
                               </Button>
                             )}
                             {alert.acknowledged && (
@@ -564,27 +683,79 @@ function DashboardContent() {
                                 Loading details...
                               </div>
                             ) : details ? (
-                              <div className="pt-3 space-y-2">
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                              <div className="pt-3 space-y-3">
+                                {/* Human-readable description */}
+                                <p className="text-sm text-foreground/80 leading-relaxed">
+                                  {getHumanDescription(alert, details)}
+                                </p>
+
+                                {/* Agent info */}
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                   <span>Agent:</span>
                                   <span className="font-medium text-foreground">{details.agent.name}</span>
+                                  {count > 1 && (
+                                    <span className="text-muted-foreground">· Occurred {count} times</span>
+                                  )}
                                 </div>
-                                {details.context?.stuckDurationMinutes != null && (
-                                  <div className="text-xs text-amber-400/80 font-mono">
-                                    Stuck for {details.context.stuckDurationMinutes}m — last heartbeat {formatRelativeTime(details.context.lastHeartbeat!)}
+
+                                {/* Technical details toggle */}
+                                {(details.relatedErrors.length > 0 || details.context?.stuckDurationMinutes != null || details.context?.currentCostUsd != null) && (
+                                  <div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowStackTrace((prev) => ({ ...prev, [alert.id]: !prev[alert.id] }));
+                                      }}
+                                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                      <svg
+                                        className={`size-3 transition-transform ${isStackVisible ? "rotate-90" : ""}`}
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        strokeWidth={2}
+                                        stroke="currentColor"
+                                      >
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                      </svg>
+                                      {isStackVisible ? "Hide technical details" : `Show technical details${details.relatedErrors.length > 0 ? ` (${details.relatedErrors.length} error${details.relatedErrors.length > 1 ? "s" : ""})` : ""}`}
+                                    </button>
+
+                                    {isStackVisible && (
+                                      <div className="mt-2 pl-4 border-l-2 border-border/30 space-y-1.5">
+                                        {details.context?.stuckDurationMinutes != null && (
+                                          <div className="text-xs text-amber-400/80 font-mono">
+                                            Stuck for {details.context.stuckDurationMinutes}m — last heartbeat {formatRelativeTime(details.context.lastHeartbeat!)}
+                                          </div>
+                                        )}
+                                        {details.context?.currentCostUsd != null && (
+                                          <div className="text-xs text-amber-400/80 font-mono">
+                                            Current: ${details.context.currentCostUsd.toFixed(2)} / Threshold: ${details.context.thresholdUsd?.toFixed(2)} (+${details.context.overage?.toFixed(2)} over)
+                                          </div>
+                                        )}
+                                        {/* Group duplicate errors */}
+                                        {Object.values(
+                                          details.relatedErrors.reduce((acc, err) => {
+                                            const key = err.error;
+                                            if (!acc[key]) acc[key] = { error: key, count: 0, lastTimestamp: err.timestamp };
+                                            acc[key].count++;
+                                            if (err.timestamp > acc[key].lastTimestamp) acc[key].lastTimestamp = err.timestamp;
+                                            return acc;
+                                          }, {} as Record<string, { error: string; count: number; lastTimestamp: string }>)
+                                        ).map((group, i) => (
+                                          <div key={i} className="flex items-start gap-2 text-xs">
+                                            <span className="text-muted-foreground shrink-0 w-16">{formatRelativeTime(group.lastTimestamp)}</span>
+                                            <span className="font-mono text-red-400/80 break-all">{group.error}</span>
+                                            {group.count > 1 && (
+                                              <Badge variant="outline" className="text-[10px] shrink-0 text-muted-foreground">
+                                                ×{group.count}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
-                                {details.context?.currentCostUsd != null && (
-                                  <div className="text-xs text-amber-400/80 font-mono">
-                                    Current: ${details.context.currentCostUsd.toFixed(2)} / Threshold: ${details.context.thresholdUsd?.toFixed(2)} (+${details.context.overage?.toFixed(2)} over)
-                                  </div>
-                                )}
-                                {details.relatedErrors.map((evt, i) => (
-                                  <div key={i} className="flex items-start gap-2 text-xs">
-                                    <span className="text-muted-foreground shrink-0 w-16">{formatRelativeTime(evt.timestamp)}</span>
-                                    <span className="font-mono text-red-400/80 break-all">{evt.error}</span>
-                                  </div>
-                                ))}
                               </div>
                             ) : null}
                           </div>

@@ -58,6 +58,8 @@ export interface AlertDetails {
   agent: { id: string; name: string; status: string };
   relatedErrors: AlertRelatedError[];
   context?: AlertDetailsContext;
+  title?: string;
+  description?: string;
 }
 
 export interface CostData {

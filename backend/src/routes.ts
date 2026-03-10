@@ -410,8 +410,22 @@ router.post("/projects", (req: Request, res: Response) => {
   res.status(201).json(project);
 });
 
-router.get("/projects", (_req: Request, res: Response) => {
-  const projects = listProjects();
+router.get("/projects", async (_req: Request, res: Response) => {
+  const profileParam = _req.query.profile as string | undefined;
+  let projects = listProjects();
+
+  // Filter projects to only include those with sessions in the selected profile
+  if (profileParam) {
+    const sessions = await listSessions(profileParam);
+    const profileSessionIds = new Set(sessions.map((s) => s.id));
+    projects = projects.filter((p: any) => {
+      const projectSessionIds = db.prepare(
+        "SELECT sessionId FROM project_sessions WHERE projectId = ?"
+      ).all(p.id) as { sessionId: string }[];
+      return projectSessionIds.some((ps) => profileSessionIds.has(ps.sessionId));
+    });
+  }
+
   res.json({ projects });
 });
 

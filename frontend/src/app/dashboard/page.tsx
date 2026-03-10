@@ -99,7 +99,7 @@ function DashboardContent() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [version, setVersion] = useState<string | null>(null);
 
-  const selectedProfile = searchParams.get("profile") || "";
+  const selectedProfile = searchParams.get("profile") || "default";
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
 
@@ -126,11 +126,7 @@ function DashboardContent() {
 
   function setSelectedProfile(profileId: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (profileId) {
-      params.set("profile", profileId);
-    } else {
-      params.delete("profile");
-    }
+    params.set("profile", profileId || "default");
     params.delete("alertPage");
     router.replace(`?${params.toString()}`, { scroll: false });
   }
@@ -148,14 +144,14 @@ function DashboardContent() {
       const sessStatus = sessionFilter === "all" ? "all" : sessionFilter === "active" ? undefined : sessionFilter;
       const severityParam = alertFilter !== "all" ? (alertFilter as AlertSeverity) : undefined;
       const offset = (alertPage - 1) * ALERTS_PER_PAGE;
-      const prof = selectedProfile || undefined;
+      const prof = selectedProfile;
       const [a, al, allAl, c, s, p] = await Promise.all([
         getAgents(agentStatus, prof),
         getAlerts({ limit: ALERTS_PER_PAGE, offset, severity: severityParam, profile: prof }),
         getAlerts({ profile: prof }),
         getCosts(prof),
         getSessions(undefined, sessStatus, sessionSort, prof),
-        getProjects(),
+        getProjects(prof),
       ]);
       setAgents(a);
       setAlerts(al.alerts);
@@ -252,7 +248,6 @@ function DashboardContent() {
                 className="bg-zinc-900 border border-border/50 rounded-md px-2.5 py-1 text-xs text-muted-foreground focus:outline-none focus:border-emerald-500/50 cursor-pointer appearance-none pr-6"
                 style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
               >
-                <option value="">All Profiles</option>
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
@@ -709,11 +704,7 @@ function DashboardContent() {
                           <Badge variant="outline" className={`text-[10px] border ${agentColors[session.agentId] || "text-zinc-400"}`}>
                             {session.agentId}
                           </Badge>
-                          {!selectedProfile && session.profile && (
-                            <Badge variant="outline" className="text-[10px] border border-zinc-500/20 text-zinc-400 bg-zinc-500/5">
-                              {profiles.find((p) => p.id === session.profile)?.name || session.profile}
-                            </Badge>
-                          )}
+
                           <span className="text-[11px] font-mono text-muted-foreground">
                             {session.model}
                           </span>

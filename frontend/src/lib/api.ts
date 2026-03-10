@@ -169,10 +169,11 @@ export async function getSession(id: string): Promise<SessionDetail> {
   }
 }
 
-export async function getProjects(): Promise<Project[]> {
+export async function getProjects(profile?: string): Promise<Project[]> {
   if (USE_MOCK) return mockProjects;
   try {
-    const data = await fetchJson<{ projects: Project[] }>("/api/projects");
+    const qs = profile ? `?profile=${profile}` : "";
+    const data = await fetchJson<{ projects: Project[] }>(`/api/projects${qs}`);
     return data.projects;
   } catch {
     console.warn("API unreachable, falling back to mock data");

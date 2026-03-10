@@ -1074,33 +1074,52 @@ function DashboardContent() {
                           const limitType = spendData?.limits.type;
                           const relevantSpend = limitType === "daily" ? agentSpend?.today : agentSpend?.mtd;
                           const isOver = agentLimit != null && relevantSpend != null && relevantSpend > agentLimit;
+                          const hasLimit = agentLimit != null && agentLimit > 0;
+                          // Bar: if limit exists, 100% = limit. Spend beyond = red overflow portion
+                          const barPercent = hasLimit && relevantSpend != null
+                            ? Math.min(100, (relevantSpend / agentLimit!) * 100)
+                            : (item.costUsd / costs.totalUsd) * 100;
+                          const withinPercent = hasLimit && relevantSpend != null && isOver
+                            ? (agentLimit! / relevantSpend) * 100
+                            : 100;
                           return (
                             <div key={item.agentId} className="space-y-1">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm">{item.name}</span>
                                   {isOver && (
-                                    <span className="text-[10px] text-red-400 font-medium">⚠️ over limit</span>
+                                    <span className="text-[10px] text-red-400 font-medium">⚠️ ${((relevantSpend ?? 0) - agentLimit!).toFixed(2)} over</span>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-3">
                                   <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-full ${isOver ? "bg-red-500" : "bg-emerald-500"}`}
-                                      style={{ width: `${(item.costUsd / costs.totalUsd) * 100}%` }}
-                                    />
+                                    {hasLimit && isOver ? (
+                                      /* Two-tone bar: green portion (within limit) + red portion (exceeded) */
+                                      <div className="h-full flex" style={{ width: `${barPercent}%` }}>
+                                        <div className="h-full bg-emerald-500" style={{ width: `${withinPercent}%` }} />
+                                        <div className="h-full bg-red-500 flex-1" />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        className={`h-full rounded-full ${hasLimit && relevantSpend != null && (relevantSpend / agentLimit!) > 0.8 ? "bg-amber-500" : hasLimit && relevantSpend != null && (relevantSpend / agentLimit!) > 0.6 ? "bg-amber-400" : "bg-emerald-500"}`}
+                                        style={{ width: `${barPercent}%` }}
+                                      />
+                                    )}
                                   </div>
-                                  <span className="text-sm font-medium w-16 text-right">
-                                    ${item.costUsd.toFixed(2)}
+                                  <span className="text-sm font-medium w-24 text-right">
+                                    {hasLimit && relevantSpend != null
+                                      ? <>${relevantSpend.toFixed(2)} <span className="text-muted-foreground/50 text-xs">(${item.costUsd.toFixed(2)})</span></>
+                                      : `$${item.costUsd.toFixed(2)}`
+                                    }
                                   </span>
                                 </div>
                               </div>
-                              {(agentLimit != null || relevantSpend != null) && (
+                              {(hasLimit || relevantSpend != null) && (
                                 <div className="flex items-center justify-between text-[11px] text-muted-foreground/60 pl-1">
-                                  {relevantSpend != null && (
+                                  {relevantSpend != null && !hasLimit && (
                                     <span>{limitType === "daily" ? "Today" : "MTD"}: ${relevantSpend.toFixed(2)}</span>
                                   )}
-                                  {agentLimit != null && (
+                                  {hasLimit && (
                                     <span>{limitType === "daily" ? "Daily" : "Monthly"} limit: ${agentLimit}</span>
                                   )}
                                 </div>

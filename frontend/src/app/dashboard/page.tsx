@@ -199,6 +199,7 @@ function DashboardContent() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [totalAgentCount, setTotalAgentCount] = useState(0);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsTotal, setAlertsTotal] = useState(0);
   const [allAlerts, setAllAlerts] = useState<Alert[]>([]);
@@ -306,8 +307,9 @@ function DashboardContent() {
       const alertOffset = (alertPage - 1) * ALERTS_PER_PAGE;
       const sessionOffset = (sessionPage - 1) * SESSIONS_PER_PAGE;
       const prof = selectedProfile;
-      const [a, al, allAl, c, sessResult, p] = await Promise.all([
+      const [a, allAgents, al, allAl, c, sessResult, p] = await Promise.all([
         getAgents(agentStatus, prof),
+        getAgents("all", prof),
         getAlerts({ limit: ALERTS_PER_PAGE, offset: alertOffset, severity: severityParam, profile: prof }),
         getAlerts({ profile: prof }),
         getCosts(prof),
@@ -315,6 +317,7 @@ function DashboardContent() {
         getProjects(prof),
       ]);
       setAgents(a);
+      setTotalAgentCount(allAgents.length);
       setAlerts(al.alerts);
       setAlertsTotal(al.total);
       setAllAlerts(allAl.alerts);
@@ -477,7 +480,7 @@ function DashboardContent() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Agents</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{agents.length}</div>
+              <div className="text-3xl font-bold">{totalAgentCount}</div>
             </CardContent>
           </Card>
           <Card>

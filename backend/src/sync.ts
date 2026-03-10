@@ -359,6 +359,9 @@ function autoDetectProjects(sessions: SessionSummary[]): Map<string, { name: str
  * Full sync: scan all JSONL files from ~/.openclaw and populate the DB.
  * Called on backend startup to prefill data.
  */
+let lastSyncTime = 0;
+export function getLastSyncTime(): number { return lastSyncTime; }
+
 export async function syncAllData(): Promise<void> {
   const profiles = discoverProfiles();
   console.log(`[Sync] Scanning OpenClaw data across ${profiles.length} profile(s): ${profiles.map(p => p.id).join(", ") || "default"}...`);
@@ -503,6 +506,7 @@ export async function syncAllData(): Promise<void> {
     for (const [id, p] of detectedProjects) {
       console.log(`[Sync]   Project "${p.name}": ${p.sessionIds.length} sessions`);
     }
+    lastSyncTime = Date.now();
   } catch (err) {
     console.error("[Sync] Error during initial scan:", err);
   }

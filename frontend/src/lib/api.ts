@@ -123,33 +123,46 @@ export async function acknowledgeAlert(id: string): Promise<void> {
   await fetchJson(`/api/alerts/${id}/acknowledge`, { method: "POST" });
 }
 
-export async function getSessions(
-  agentId?: string,
-  status?: string,
-  sort?: string,
-  profile?: string
-): Promise<Session[]> {
+export interface SessionsResponse {
+  sessions: Session[];
+  total: number;
+}
+
+export async function getSessions(opts?: {
+  agentId?: string;
+  status?: string;
+  sort?: string;
+  profile?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<SessionsResponse> {
+  const { agentId, status, sort, profile, limit, offset } = opts || {};
   if (USE_MOCK) {
     let sessions = [...mockSessions];
     if (agentId) sessions = sessions.filter((s) => s.agentId === agentId);
-    if (status) sessions = sessions.filter((s) => s.status === status);
+    if (status && status !== "all") sessions = sessions.filter((s) => s.status === status);
     if (sort === "cost") sessions.sort((a, b) => b.costUsd - a.costUsd);
     else if (sort === "tokens") sessions.sort((a, b) => b.tokenCount - a.tokenCount);
     else sessions.sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime());
-    return sessions;
+    const total = sessions.length;
+    const start = offset || 0;
+    const end = limit ? start + limit : sessions.length;
+    return { sessions: sessions.slice(start, end), total };
   }
   try {
     const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    if (offset) params.set("offset", String(offset));
     if (agentId) params.set("agentId", agentId);
     if (status) params.set("status", status);
     if (sort) params.set("sort", sort);
     if (profile) params.set("profile", profile);
     const qs = params.toString();
-    const data = await fetchJson<{ sessions: Session[] }>(`/api/sessions${qs ? `?${qs}` : ""}`);
-    return data.sessions;
+    const data = await fetchJson<{ sessions: Session[]; total: number }>(`/api/sessions${qs ? `?${qs}` : ""}`);
+    return { sessions: data.sessions, total: data.total };
   } catch {
     console.warn("API unreachable, falling back to mock data");
-    return mockSessions;
+    return { sessions: mockSessions, total: mockSessions.length };
   }
 }
 
@@ -226,6 +239,21 @@ export async function addSessionToProject(projectId: string, sessionId: string):
 export async function removeSessionFromProject(projectId: string, sessionId: string): Promise<void> {
   if (USE_MOCK) return;
   await fetchJson(`/api/projects/${projectId}/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function setSessionProjects(sessionId: string, projectIds: string[]): Promise<void> {
+  if (USE_MOCK) return;
+  await fetchJson(`/api/sessions/${sessionId}/projects`, {
+    method: "PUT",
+    body: JSON.stringify({ projectIds }),
+  });
+}
+
+export async function removeSessionProject(sessionId: string, projectId: string): Promise<void> {
+  if (USE_MOCK) return;
+  await fetchJson(`/api/sessions/${sessionId}/projects/${projectId}`, {
     method: "DELETE",
   });
 }

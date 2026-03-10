@@ -192,7 +192,9 @@ async function parseSessionFile(
   collectMessages: boolean,
   profileId: string = "default"
 ): Promise<{ summary: SessionSummary; detail?: Omit<SessionDetail, keyof SessionSummary> } | null> {
-  const sessionId = path.basename(filePath, ".jsonl");
+  // Handle both .jsonl and .jsonl.reset.TIMESTAMP files
+  const basename = path.basename(filePath);
+  const sessionId = basename.replace(/\.jsonl(\.reset\.\S+)?$/, "");
 
   let firstTimestamp = "";
   let lastTimestamp = "";
@@ -351,7 +353,7 @@ async function listSessionsForDir(dir: string, profileId: string): Promise<Sessi
 
   for (const agentName of agentNames) {
     const sessionsDir = path.join(agentsDir, agentName, "sessions");
-    const files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith(".jsonl"));
+    const files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith(".jsonl") || f.includes(".jsonl.reset."));
 
     const results = await Promise.all(
       files.map((f) => parseSessionFile(path.join(sessionsDir, f), agentName, false, profileId))
@@ -426,8 +428,22 @@ export async function getSessionDetail(sessionId: string, profile?: string): Pro
     const agentNames = fs.readdirSync(agentsDir);
 
     for (const agentName of agentNames) {
-      const filePath = path.join(agentsDir, agentName, "sessions", `${sessionId}.jsonl`);
-      if (!fs.existsSync(filePath)) continue;
+      const sessionsDir = path.join(agentsDir, agentName, "sessions");
+      if (!fs.existsSync(sessionsDir)) continue;
+
+      // Check both .jsonl and .jsonl.reset.* files
+      let filePath = path.join(sessionsDir, `${sessionId}.jsonl`);
+      if (!fs.existsSync(filePath)) {
+        // Look for reset file
+        const resetFile = fs.readdirSync(sessionsDir).find(
+          (f) => f.startsWith(`${sessionId}.jsonl.reset.`)
+        );
+        if (resetFile) {
+          filePath = path.join(sessionsDir, resetFile);
+        } else {
+          continue;
+        }
+      }
 
       const result = await parseSessionFile(filePath, agentName, true, p.id);
       if (!result || !result.detail) return null;

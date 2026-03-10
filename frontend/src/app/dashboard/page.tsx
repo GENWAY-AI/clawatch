@@ -1324,7 +1324,7 @@ function DashboardContent() {
                         <CardContent>
                           <div className="text-3xl font-bold">${totalCostPeriod.toFixed(2)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">
-                            {analyticsGroupBy === "hour" ? "Last 3 days" : analyticsGroupBy === "week" ? "All weeks" : "All days"}
+                            {analyticsGroupBy === "hour" ? "Last 3 days" : "All time"}
                           </div>
                         </CardContent>
                       </Card>
@@ -1334,9 +1334,7 @@ function DashboardContent() {
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">{formatTokens(analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalTokens : totalTokens)}</div>
-                          {analyticsGroupBy === "hour" && (
-                            <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
-                          )}
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
                         </CardContent>
                       </Card>
                       <Card>
@@ -1345,9 +1343,7 @@ function DashboardContent() {
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">{analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalSessions : totalSessions}</div>
-                          {analyticsGroupBy === "hour" && (
-                            <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
-                          )}
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
                         </CardContent>
                       </Card>
                       <Card>
@@ -1359,7 +1355,7 @@ function DashboardContent() {
                         <CardContent>
                           <div className="text-3xl font-bold">${avgDailyCost.toFixed(2)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">
-                            {analyticsGroupBy === "hour" ? "Last 3 days" : analyticsGroupBy === "week" ? "All weeks" : "All days"}
+                            {analyticsGroupBy === "hour" ? "Last 3 days" : "All time"}
                           </div>
                         </CardContent>
                       </Card>

@@ -80,6 +80,7 @@ type SessionSort = "recent" | "cost" | "tokens";
 type AlertFilter = "all" | "critical" | "warning" | "info";
 
 const ALERTS_PER_PAGE = 5;
+const SESSIONS_PER_PAGE = 20;
 
 function ProjectTagChips({
   session,
@@ -191,9 +192,10 @@ function DashboardContent() {
   const [allAlerts, setAllAlerts] = useState<Alert[]>([]);
   const [costs, setCosts] = useState<CostData | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsTotal, setSessionsTotal] = useState(0);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [sessionFilter, setSessionFilter] = useState<SessionFilter>("active");
-  const [sessionSort, setSessionSort] = useState<SessionSort>("recent");
+  const [sessionFilter, setSessionFilterRaw] = useState<SessionFilter>("active");
+  const [sessionSort, setSessionSortRaw] = useState<SessionSort>("recent");
   const [showIdleAgents, setShowIdleAgents] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -206,6 +208,7 @@ function DashboardContent() {
   const selectedProfile = searchParams.get("profile") || "default";
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
+  const sessionPage = Math.max(1, parseInt(searchParams.get("sessionPage") || "1", 10));
 
   function setAlertFilter(filter: AlertFilter) {
     const params = new URLSearchParams(searchParams.toString());
@@ -228,10 +231,36 @@ function DashboardContent() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
+  function setSessionFilter(f: SessionFilter) {
+    setSessionFilterRaw(f);
+    // Reset page when filter changes
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("sessionPage");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setSessionSort(s: SessionSort) {
+    setSessionSortRaw(s);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("sessionPage");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setSessionPage(page: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (page <= 1) {
+      params.delete("sessionPage");
+    } else {
+      params.set("sessionPage", String(page));
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
   function setSelectedProfile(profileId: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("profile", profileId || "default");
     params.delete("alertPage");
+    params.delete("sessionPage");
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
@@ -247,14 +276,15 @@ function DashboardContent() {
       const agentStatus = showIdleAgents ? "all" : undefined;
       const sessStatus = sessionFilter === "all" ? "all" : sessionFilter === "active" ? undefined : sessionFilter;
       const severityParam = alertFilter !== "all" ? (alertFilter as AlertSeverity) : undefined;
-      const offset = (alertPage - 1) * ALERTS_PER_PAGE;
+      const alertOffset = (alertPage - 1) * ALERTS_PER_PAGE;
+      const sessionOffset = (sessionPage - 1) * SESSIONS_PER_PAGE;
       const prof = selectedProfile;
-      const [a, al, allAl, c, s, p] = await Promise.all([
+      const [a, al, allAl, c, sessResult, p] = await Promise.all([
         getAgents(agentStatus, prof),
-        getAlerts({ limit: ALERTS_PER_PAGE, offset, severity: severityParam, profile: prof }),
+        getAlerts({ limit: ALERTS_PER_PAGE, offset: alertOffset, severity: severityParam, profile: prof }),
         getAlerts({ profile: prof }),
         getCosts(prof),
-        getSessions(undefined, sessStatus, sessionSort, prof),
+        getSessions({ status: sessStatus, sort: sessionSort, profile: prof, limit: SESSIONS_PER_PAGE, offset: sessionOffset }),
         getProjects(prof),
       ]);
       setAgents(a);
@@ -262,12 +292,13 @@ function DashboardContent() {
       setAlertsTotal(al.total);
       setAllAlerts(allAl.alerts);
       setCosts(c);
-      setSessions(s);
+      setSessions(sessResult.sessions);
+      setSessionsTotal(sessResult.total);
       setProjects(p);
     } finally {
       setLoading(false);
     }
-  }, [showIdleAgents, sessionFilter, sessionSort, alertFilter, alertPage, selectedProfile]);
+  }, [showIdleAgents, sessionFilter, sessionSort, alertFilter, alertPage, sessionPage, selectedProfile]);
 
   useEffect(() => {
     fetchData();
@@ -475,7 +506,7 @@ function DashboardContent() {
           >
             Sessions
             <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
-              {sessions.length}
+              {sessionsTotal || sessions.length}
             </Badge>
             {tab === "sessions" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
@@ -877,6 +908,33 @@ function DashboardContent() {
                 </div>
               )}
             </div>
+
+            {/* Session Pagination */}
+            {sessionsTotal > SESSIONS_PER_PAGE && (
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  disabled={sessionPage <= 1}
+                  onClick={() => setSessionPage(sessionPage - 1)}
+                >
+                  Previous
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Page {sessionPage} of {Math.ceil(sessionsTotal / SESSIONS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  disabled={sessionPage >= Math.ceil(sessionsTotal / SESSIONS_PER_PAGE)}
+                  onClick={() => setSessionPage(sessionPage + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

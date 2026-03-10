@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project } from "@/lib/types";
-import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, getSessions, getProjects, createProject } from "@/lib/api";
+import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 
 function formatRelativeTime(iso: string): string {
@@ -58,12 +58,33 @@ const severityConfig: Record<AlertSeverity, { color: string; icon: string }> = {
 type Tab = "agents" | "sessions" | "projects";
 type SessionFilter = "all" | "active" | "idle" | "completed";
 type SessionSort = "recent" | "cost" | "tokens";
+type AlertFilter = "all" | "critical" | "warning" | "info";
+
+const ALERTS_PER_PAGE = 5;
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <div className="size-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          Loading dashboard...
+        </div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("agents");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alertsTotal, setAlertsTotal] = useState(0);
+  const [allAlerts, setAllAlerts] = useState<Alert[]>([]);
   const [costs, setCosts] = useState<CostData | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -74,27 +95,57 @@ export default function DashboardPage() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
+  const [ackAllLoading, setAckAllLoading] = useState(false);
+
+  const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
+  const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
+
+  function setAlertFilter(filter: AlertFilter) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (filter === "all") {
+      params.delete("alertSeverity");
+    } else {
+      params.set("alertSeverity", filter);
+    }
+    params.delete("alertPage");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setAlertPage(page: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (page <= 1) {
+      params.delete("alertPage");
+    } else {
+      params.set("alertPage", String(page));
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
 
   const fetchData = useCallback(async () => {
     try {
       const agentStatus = showIdleAgents ? "all" : undefined;
       const sessStatus = sessionFilter === "all" ? "all" : sessionFilter === "active" ? undefined : sessionFilter;
-      const [a, al, c, s, p] = await Promise.all([
+      const severityParam = alertFilter !== "all" ? (alertFilter as AlertSeverity) : undefined;
+      const offset = (alertPage - 1) * ALERTS_PER_PAGE;
+      const [a, al, allAl, c, s, p] = await Promise.all([
         getAgents(agentStatus),
+        getAlerts({ limit: ALERTS_PER_PAGE, offset, severity: severityParam }),
         getAlerts(),
         getCosts(),
         getSessions(undefined, sessStatus, sessionSort),
         getProjects(),
       ]);
       setAgents(a);
-      setAlerts(al);
+      setAlerts(al.alerts);
+      setAlertsTotal(al.total);
+      setAllAlerts(allAl.alerts);
       setCosts(c);
       setSessions(s);
       setProjects(p);
     } finally {
       setLoading(false);
     }
-  }, [showIdleAgents, sessionFilter, sessionSort]);
+  }, [showIdleAgents, sessionFilter, sessionSort, alertFilter, alertPage]);
 
   useEffect(() => {
     fetchData();
@@ -102,7 +153,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const unackedAlerts = alerts.filter((a) => !a.acknowledged);
+  const unackedAlerts = allAlerts.filter((a) => !a.acknowledged);
   const criticalAlerts = unackedAlerts.filter((a) => a.severity === "critical" || a.severity === "warning");
   const runningCount = agents.filter((a) => a.status === "running" || a.status === "active").length;
   const totalCost = costs?.totalUsd ?? 0;
@@ -120,6 +171,30 @@ export default function DashboardPage() {
   async function handleAcknowledge(alertId: string) {
     await acknowledgeAlert(alertId);
     setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, acknowledged: true } : a)));
+    setAllAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, acknowledged: true } : a)));
+  }
+
+  async function handleAcknowledgeAll() {
+    setAckAllLoading(true);
+    const severityParam = alertFilter !== "all" ? (alertFilter as AlertSeverity) : undefined;
+    // Optimistic update
+    const prevAlerts = alerts;
+    const prevAllAlerts = allAlerts;
+    setAlerts((prev) => prev.map((a) => ({ ...a, acknowledged: true })));
+    setAllAlerts((prev) =>
+      prev.map((a) =>
+        !severityParam || a.severity === severityParam ? { ...a, acknowledged: true } : a
+      )
+    );
+    try {
+      await acknowledgeAllAlerts(severityParam);
+    } catch {
+      // Rollback on error
+      setAlerts(prevAlerts);
+      setAllAlerts(prevAllAlerts);
+    } finally {
+      setAckAllLoading(false);
+    }
   }
 
   if (loading) {
@@ -410,7 +485,36 @@ export default function DashboardPage() {
 
             {/* All Alerts */}
             <div>
-              <h2 className="text-lg font-semibold mb-4">All Alerts</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">All Alerts</h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                  disabled={ackAllLoading || alerts.every((a) => a.acknowledged)}
+                  onClick={handleAcknowledgeAll}
+                >
+                  {ackAllLoading ? "Acknowledging..." : `Acknowledge All${alertFilter !== "all" ? ` ${alertFilter}` : ""}`}
+                </Button>
+              </div>
+
+              {/* Severity Filter Chips */}
+              <div className="flex items-center gap-1 mb-4">
+                {(["all", "critical", "warning", "info"] as AlertFilter[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setAlertFilter(f)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      alertFilter === f
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+
               <Card>
                 <CardContent className="pt-4 space-y-2">
                   {alerts.map((alert) => {
@@ -451,8 +555,40 @@ export default function DashboardPage() {
                       </div>
                     );
                   })}
+                  {alerts.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      No alerts found.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
+
+              {/* Pagination */}
+              {alertsTotal > ALERTS_PER_PAGE && (
+                <div className="flex items-center justify-between mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    disabled={alertPage <= 1}
+                    onClick={() => setAlertPage(alertPage - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Page {alertPage} of {Math.ceil(alertsTotal / ALERTS_PER_PAGE)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    disabled={alertPage >= Math.ceil(alertsTotal / ALERTS_PER_PAGE)}
+                    onClick={() => setAlertPage(alertPage + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
             </div>
           </>
         )}

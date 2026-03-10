@@ -21,6 +21,25 @@ function formatRelativeTime(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+function formatDuration(ms: number): string {
+  const totalMinutes = Math.floor(ms / 60000);
+  const totalHours = Math.floor(totalMinutes / 60);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function formatTimeline(first: string, last: string): string {
+  const f = new Date(first);
+  const l = new Date(last);
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (f.toDateString() === l.toDateString()) return fmt(f);
+  return `${fmt(f)} – ${fmt(l)}`;
+}
+
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
@@ -930,7 +949,15 @@ function DashboardContent() {
                       </p>
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span>{project.sessionCount} sessions</span>
-                        <span>{formatRelativeTime(project.updatedAt)}</span>
+                        {project.firstActivityAt && project.lastActivityAt && (
+                          <span>{formatTimeline(project.firstActivityAt, project.lastActivityAt)}</span>
+                        )}
+                        {project.durationMs != null && project.durationMs > 0 && (
+                          <span>{formatDuration(project.durationMs)}</span>
+                        )}
+                        {!project.firstActivityAt && (
+                          <span>{formatRelativeTime(project.updatedAt)}</span>
+                        )}
                       </div>
                     </div>
                     <div className="text-right shrink-0 ml-4">

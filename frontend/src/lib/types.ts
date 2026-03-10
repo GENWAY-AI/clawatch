@@ -86,6 +86,9 @@ export interface Project {
   updatedAt: string;
   sessionCount: number;
   totalCostUsd: number;
+  firstActivityAt?: string;
+  lastActivityAt?: string;
+  durationMs?: number;
 }
 
 export interface ProjectDetail {

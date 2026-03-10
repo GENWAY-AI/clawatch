@@ -36,6 +36,32 @@ export interface Alert {
   acknowledged: boolean;
 }
 
+export interface AlertRelatedError {
+  timestamp: string;
+  error: string;
+  raw?: Record<string, unknown>;
+}
+
+export interface AlertDetailsContext {
+  // stuck alerts
+  lastHeartbeat?: string;
+  stuckDurationMinutes?: number;
+  agentStatus?: string;
+  // cost_spike alerts
+  currentCostUsd?: number;
+  thresholdUsd?: number;
+  overage?: number;
+}
+
+export interface AlertDetails {
+  alert: Alert;
+  agent: { id: string; name: string; status: string };
+  relatedErrors: AlertRelatedError[];
+  context?: AlertDetailsContext;
+  title?: string;
+  description?: string;
+}
+
 export interface CostData {
   totalUsd: number;
   byAgent: { agentId: string; name: string; costUsd: number }[];

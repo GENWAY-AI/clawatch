@@ -108,28 +108,36 @@ class UnionFind {
 }
 
 /**
- * Sample the first N lines of a session's JSONL file to extract text for pattern matching.
- * Much more reliable than title-only matching since session content contains project references.
+ * Count pattern matches in a session's JSONL content.
+ * Returns the count of matches for a given pattern, sampling up to maxBytes.
+ * Requires multiple hits to avoid false positives from tool calls / infra noise.
  */
-function sampleSessionContent(sessionId: string, agentId: string): string {
+function countPatternInContent(sessionId: string, agentId: string, pattern: RegExp, maxBytes = 32768): number {
   const profiles = discoverProfiles();
   for (const profile of profiles) {
     const filePath = path.join(profile.dir, "agents", agentId, "sessions", `${sessionId}.jsonl`);
     if (!fs.existsSync(filePath)) continue;
 
     try {
-      // Read first 8KB — enough to capture project references without full parse
+      const stat = fs.statSync(filePath);
+      const readSize = Math.min(stat.size, maxBytes);
       const fd = fs.openSync(filePath, "r");
-      const buffer = Buffer.alloc(8192);
-      const bytesRead = fs.readSync(fd, buffer, 0, 8192, 0);
+      const buffer = Buffer.alloc(readSize);
+      const bytesRead = fs.readSync(fd, buffer, 0, readSize, 0);
       fs.closeSync(fd);
-      return buffer.toString("utf-8", 0, bytesRead);
+      const content = buffer.toString("utf-8", 0, bytesRead);
+      const matches = content.match(new RegExp(pattern.source, "gi"));
+      return matches ? matches.length : 0;
     } catch {
-      return "";
+      return 0;
     }
   }
-  return "";
+  return 0;
 }
+
+// Minimum pattern hits in content to count as a project match.
+// Prevents false positives from single mentions in tool calls or quoted text.
+const CONTENT_MATCH_THRESHOLD = 3;
 
 /**
  * Auto-detect projects using:
@@ -163,20 +171,19 @@ function autoDetectProjects(sessions: SessionSummary[]): Map<string, { name: str
       }
     }
 
-    // If title didn't match, sample the content (catches "Untitled session" etc.)
+    // If title didn't match, check content (catches "Untitled session" etc.)
+    // Requires multiple hits to avoid false positives from tool calls / infra noise
     if (!matched) {
-      const content = sampleSessionContent(session.id, session.agentId);
-      if (content) {
-        for (const [pattern, projectName] of PROJECT_PATTERNS) {
-          if (pattern.test(content)) {
-            const projectId = `auto_${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
-            if (!patternProjects.has(projectId)) {
-              patternProjects.set(projectId, { name: projectName, sessionIds: new Set() });
-            }
-            patternProjects.get(projectId)!.sessionIds.add(session.id);
-            patternMatched.add(session.id);
-            break;
+      for (const [pattern, projectName] of PROJECT_PATTERNS) {
+        const hits = countPatternInContent(session.id, session.agentId, pattern);
+        if (hits >= CONTENT_MATCH_THRESHOLD) {
+          const projectId = `auto_${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+          if (!patternProjects.has(projectId)) {
+            patternProjects.set(projectId, { name: projectName, sessionIds: new Set() });
           }
+          patternProjects.get(projectId)!.sessionIds.add(session.id);
+          patternMatched.add(session.id);
+          break;
         }
       }
     }
@@ -420,6 +427,24 @@ export async function syncAllData(): Promise<void> {
         }
       }
     })();
+
+    // Clean up stale auto-projects that are no longer detected
+    const staleAutoProjects = db.prepare(
+      "SELECT id FROM projects WHERE id LIKE 'auto_%'"
+    ).all() as { id: string }[];
+    let removedCount = 0;
+    db.transaction(() => {
+      for (const { id } of staleAutoProjects) {
+        if (!detectedProjects.has(id)) {
+          db.prepare("DELETE FROM project_sessions WHERE projectId = ?").run(id);
+          db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+          removedCount++;
+        }
+      }
+    })();
+    if (removedCount > 0) {
+      console.log(`[Sync] Cleaned up ${removedCount} stale auto-project(s)`);
+    }
 
     const elapsed = Date.now() - start;
     const topAgents = agents.sort((a, b) => b.costUsd - a.costUsd).slice(0, 5);

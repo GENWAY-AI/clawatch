@@ -1157,10 +1157,21 @@ function DashboardContent() {
                               <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                               <Tooltip
-                                contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
-                                labelStyle={{ color: "#a1a1aa" }}
-                                labelFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                                formatter={(value, name) => [`$${Number(value).toFixed(2)}`, String(name)]}
+                                content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null;
+                                  const visible = payload.filter((p) => !hiddenProjectSeries.has(String(p.dataKey)));
+                                  if (!visible.length) return null;
+                                  return (
+                                    <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{new Date(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      {visible.map((entry) => (
+                                        <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
+                                          {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                }}
                               />
                               <Legend
                                 wrapperStyle={{ color: "#a1a1aa", fontSize: 12, cursor: "pointer" }}
@@ -1230,10 +1241,21 @@ function DashboardContent() {
                               <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                               <Tooltip
-                                contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
-                                labelStyle={{ color: "#a1a1aa" }}
-                                labelFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                                formatter={(value, name) => [`$${Number(value).toFixed(2)}`, String(name)]}
+                                content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null;
+                                  const visible = payload.filter((p) => !hiddenAgentSeries.has(String(p.dataKey)));
+                                  if (!visible.length) return null;
+                                  return (
+                                    <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{new Date(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      {visible.map((entry) => (
+                                        <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
+                                          {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                }}
                               />
                               <Legend
                                 wrapperStyle={{ color: "#a1a1aa", fontSize: 12, cursor: "pointer" }}

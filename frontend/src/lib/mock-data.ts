@@ -1,4 +1,4 @@
-import { Agent, Alert, CostData, Session, SessionDetail, SessionMessage, Project, ProjectDetail, TimelineMessage } from "./types";
+import { Agent, Alert, AlertDetails, AlertRelatedError, CostData, Session, SessionDetail, SessionMessage, Project, ProjectDetail, TimelineMessage } from "./types";
 
 const now = new Date();
 const minutesAgo = (m: number) => new Date(now.getTime() - m * 60000).toISOString();
@@ -603,3 +603,44 @@ for (const session of mockSessions) {
     messages: buildMockMessages(session.id),
   };
 }
+
+export const mockAlertDetails: Record<string, AlertDetails> = {
+  "alert-1": {
+    alert: mockAlerts[0],
+    agent: { id: "agent-4", name: "customer-support", status: "stuck" },
+    relatedErrors: [],
+    context: { lastHeartbeat: minutesAgo(45), stuckDurationMinutes: 45, agentStatus: "stuck" },
+  },
+  "alert-2": {
+    alert: mockAlerts[1],
+    agent: { id: "agent-3", name: "data-pipeline", status: "error" },
+    relatedErrors: [
+      { timestamp: minutesAgo(12), error: "TypeError: Cannot read properties of undefined (reading 'map')" },
+      { timestamp: minutesAgo(11), error: "ECONNREFUSED: Connection refused to database at 127.0.0.1:5432" },
+      { timestamp: minutesAgo(11), error: "ECONNREFUSED: Connection refused to database at 127.0.0.1:5432" },
+      { timestamp: minutesAgo(10), error: "Unhandled promise rejection: Query timeout after 30000ms" },
+      { timestamp: minutesAgo(10), error: "FATAL: too many connections for role \"app_user\"" },
+    ],
+  },
+  "alert-3": {
+    alert: mockAlerts[2],
+    agent: { id: "agent-4", name: "customer-support", status: "running" },
+    relatedErrors: [],
+    context: { currentCostUsd: 12.67, thresholdUsd: 10, overage: 2.67 },
+  },
+  "alert-4": {
+    alert: mockAlerts[3],
+    agent: { id: "agent-8", name: "slack-responder", status: "running" },
+    relatedErrors: [
+      { timestamp: minutesAgo(32), error: "Detected 5 consecutive similar outputs — possible retry loop" },
+      { timestamp: minutesAgo(31), error: "Output similarity score: 0.94 (threshold: 0.85)" },
+    ],
+  },
+  "alert-5": {
+    alert: mockAlerts[4],
+    agent: { id: "agent-2", name: "deploy-bot", status: "running" },
+    relatedErrors: [
+      { timestamp: hoursAgo(3), error: "API returned 503 Service Unavailable — auto-retried successfully" },
+    ],
+  },
+};

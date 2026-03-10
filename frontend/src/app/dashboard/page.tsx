@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project } from "@/lib/types";
-import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, getSessions, getProjects, createProject } from "@/lib/api";
+import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project } from "@/lib/types";
+import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, getAlertDetails, getSessions, getProjects, createProject } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 
 function formatRelativeTime(iso: string): string {
@@ -74,6 +74,9 @@ export default function DashboardPage() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
+  const [expandedAlerts, setExpandedAlerts] = useState<Record<string, AlertDetails | "loading">>({});
+  const expandedAlertsRef = useRef(expandedAlerts);
+  expandedAlertsRef.current = expandedAlerts;
 
   const fetchData = useCallback(async () => {
     try {
@@ -87,7 +90,11 @@ export default function DashboardPage() {
         getProjects(),
       ]);
       setAgents(a);
-      setAlerts(al);
+      // Skip alerts update while any alert is expanded to prevent re-render collapse
+      const hasExpanded = Object.keys(expandedAlertsRef.current).length > 0;
+      if (!hasExpanded) {
+        setAlerts(al);
+      }
       setCosts(c);
       setSessions(s);
       setProjects(p);
@@ -120,6 +127,33 @@ export default function DashboardPage() {
   async function handleAcknowledge(alertId: string) {
     await acknowledgeAlert(alertId);
     setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, acknowledged: true } : a)));
+  }
+
+  async function handleToggleAlertDetails(alertId: string) {
+    const current = expandedAlerts[alertId];
+    if (current === "loading") return; // Don't toggle while loading
+    if (current) {
+      // Collapse
+      setExpandedAlerts((prev) => {
+        const next = { ...prev };
+        delete next[alertId];
+        return next;
+      });
+      return;
+    }
+    // Expand — fetch details
+    setExpandedAlerts((prev) => ({ ...prev, [alertId]: "loading" }));
+    try {
+      const details = await getAlertDetails(alertId);
+      setExpandedAlerts((prev) => ({ ...prev, [alertId]: details }));
+    } catch {
+      // On error, show alert is expanded but with no details (don't silently collapse)
+      setExpandedAlerts((prev) => {
+        const next = { ...prev };
+        delete next[alertId];
+        return next;
+      });
+    }
   }
 
   if (loading) {
@@ -156,32 +190,85 @@ export default function DashboardPage() {
         {/* Alert Banner */}
         {criticalAlerts.length > 0 && (
           <div className="space-y-2">
-            {criticalAlerts.map((alert) => (
-              <div
-                key={alert.id}
-                className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${
-                  alert.severity === "critical"
-                    ? "border-red-500/30 bg-red-500/5 text-red-400"
-                    : "border-amber-500/30 bg-amber-500/5 text-amber-400"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs font-bold uppercase">
-                    {alert.severity}
-                  </span>
-                  <span>{alert.message}</span>
-                  <span className="text-xs opacity-60">{formatRelativeTime(alert.timestamp)}</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => handleAcknowledge(alert.id)}
-                  className="text-current hover:bg-white/10"
+            {criticalAlerts.map((alert) => {
+              const expanded = expandedAlerts[alert.id];
+              const isExpanded = !!expanded;
+              const isLoading = expanded === "loading";
+              const details = expanded && expanded !== "loading" ? expanded : null;
+              return (
+                <div
+                  key={alert.id}
+                  className={`rounded-lg border text-sm overflow-hidden ${
+                    alert.severity === "critical"
+                      ? "border-red-500/30 bg-red-500/5 text-red-400"
+                      : "border-amber-500/30 bg-amber-500/5 text-amber-400"
+                  }`}
                 >
-                  Acknowledge
-                </Button>
-              </div>
-            ))}
+                  <div
+                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                    onClick={() => handleToggleAlertDetails(alert.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <svg
+                        className={`size-4 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
+                      <span className="font-mono text-xs font-bold uppercase">
+                        {alert.severity}
+                      </span>
+                      <span>{alert.message}</span>
+                      <span className="text-xs opacity-60">{formatRelativeTime(alert.timestamp)}</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={(e) => { e.stopPropagation(); handleAcknowledge(alert.id); }}
+                      className="text-current hover:bg-white/10"
+                    >
+                      Acknowledge
+                    </Button>
+                  </div>
+                  {isExpanded && (
+                    <div className="px-4 pb-3 border-t border-white/[0.06]">
+                      {isLoading ? (
+                        <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                          <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          Loading details...
+                        </div>
+                      ) : details ? (
+                        <div className="pt-3 space-y-2">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                            <span>Agent:</span>
+                            <span className="font-medium text-foreground">{details.agent.name}</span>
+                          </div>
+                          {details.context?.stuckDurationMinutes != null && (
+                            <div className="text-xs text-amber-400/80 font-mono">
+                              Stuck for {details.context.stuckDurationMinutes}m — last heartbeat {formatRelativeTime(details.context.lastHeartbeat!)}
+                            </div>
+                          )}
+                          {details.context?.currentCostUsd != null && (
+                            <div className="text-xs text-amber-400/80 font-mono">
+                              Current: ${details.context.currentCostUsd.toFixed(2)} / Threshold: ${details.context.thresholdUsd?.toFixed(2)} (+${details.context.overage?.toFixed(2)} over)
+                            </div>
+                          )}
+                          {details.relatedErrors.map((evt, i) => (
+                            <div key={i} className="flex items-start gap-2 text-xs">
+                              <span className="text-muted-foreground shrink-0 w-16">{formatRelativeTime(evt.timestamp)}</span>
+                              <span className="font-mono text-red-300/80 break-all">{evt.error}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -415,39 +502,90 @@ export default function DashboardPage() {
                 <CardContent className="pt-4 space-y-2">
                   {alerts.map((alert) => {
                     const sc = severityConfig[alert.severity];
+                    const expanded = expandedAlerts[alert.id];
+                    const isExpanded = !!expanded;
+                    const isLoading = expanded === "loading";
+                    const details = expanded && expanded !== "loading" ? expanded : null;
                     return (
                       <div
                         key={alert.id}
-                        className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-sm ${
+                        className={`rounded-lg overflow-hidden ${
                           alert.acknowledged ? "opacity-50" : ""
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className={`${sc.color} border text-[10px] uppercase font-bold`}>
-                            {alert.severity}
-                          </Badge>
-                          <Badge variant="outline" className="text-[10px] uppercase">
-                            {alert.type.replace("_", " ")}
-                          </Badge>
-                          <span>{alert.message}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs text-muted-foreground">
-                            {formatRelativeTime(alert.timestamp)}
-                          </span>
-                          {!alert.acknowledged && (
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={() => handleAcknowledge(alert.id)}
+                        <div
+                          className="flex items-center justify-between px-3 py-2.5 text-sm cursor-pointer hover:bg-white/[0.02] transition-colors"
+                          onClick={() => handleToggleAlertDetails(alert.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <svg
+                              className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={2}
+                              stroke="currentColor"
                             >
-                              Ack
-                            </Button>
-                          )}
-                          {alert.acknowledged && (
-                            <span className="text-xs text-muted-foreground">Acked</span>
-                          )}
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                            </svg>
+                            <Badge variant="outline" className={`${sc.color} border text-[10px] uppercase font-bold`}>
+                              {alert.severity}
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px] uppercase">
+                              {alert.type.replace("_", " ")}
+                            </Badge>
+                            <span>{alert.message}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-muted-foreground">
+                              {formatRelativeTime(alert.timestamp)}
+                            </span>
+                            {!alert.acknowledged && (
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                onClick={(e) => { e.stopPropagation(); handleAcknowledge(alert.id); }}
+                              >
+                                Ack
+                              </Button>
+                            )}
+                            {alert.acknowledged && (
+                              <span className="text-xs text-muted-foreground">Acked</span>
+                            )}
+                          </div>
                         </div>
+                        {isExpanded && (
+                          <div className="px-3 pb-3 ml-6 border-t border-border/30">
+                            {isLoading ? (
+                              <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                                <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                Loading details...
+                              </div>
+                            ) : details ? (
+                              <div className="pt-3 space-y-2">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                                  <span>Agent:</span>
+                                  <span className="font-medium text-foreground">{details.agent.name}</span>
+                                </div>
+                                {details.context?.stuckDurationMinutes != null && (
+                                  <div className="text-xs text-amber-400/80 font-mono">
+                                    Stuck for {details.context.stuckDurationMinutes}m — last heartbeat {formatRelativeTime(details.context.lastHeartbeat!)}
+                                  </div>
+                                )}
+                                {details.context?.currentCostUsd != null && (
+                                  <div className="text-xs text-amber-400/80 font-mono">
+                                    Current: ${details.context.currentCostUsd.toFixed(2)} / Threshold: ${details.context.thresholdUsd?.toFixed(2)} (+${details.context.overage?.toFixed(2)} over)
+                                  </div>
+                                )}
+                                {details.relatedErrors.map((evt, i) => (
+                                  <div key={i} className="flex items-start gap-2 text-xs">
+                                    <span className="text-muted-foreground shrink-0 w-16">{formatRelativeTime(evt.timestamp)}</span>
+                                    <span className="font-mono text-red-400/80 break-all">{evt.error}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

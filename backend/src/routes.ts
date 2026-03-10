@@ -206,6 +206,67 @@ router.post("/alerts/:id/acknowledge", (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+router.get("/alerts/:id/details", (req: Request, res: Response) => {
+  const alert = db.prepare("SELECT * FROM alerts WHERE id = ?").get(req.params.id) as any;
+  if (!alert) {
+    res.status(404).json({ error: "Alert not found" });
+    return;
+  }
+  alert.acknowledged = Boolean(alert.acknowledged);
+
+  // Get agent info
+  const agent = db.prepare("SELECT id, name, status, lastHeartbeat, costUsd FROM agents WHERE id = ?")
+    .get(alert.agentId) as any;
+
+  let relatedErrors: any[] = [];
+  let context: any = {};
+
+  if (alert.type === "error") {
+    // Error spike: get the actual error events within the spike window before the alert
+    const ERROR_SPIKE_WINDOW_MS = parseInt(process.env.ERROR_SPIKE_WINDOW_MS || "60000", 10);
+    const windowStart = new Date(new Date(alert.timestamp).getTime() - ERROR_SPIKE_WINDOW_MS).toISOString();
+    relatedErrors = db.prepare(`
+      SELECT type, timestamp, data FROM events
+      WHERE agentId = ? AND type = 'error' AND timestamp > ? AND timestamp <= ?
+      ORDER BY timestamp DESC
+    `).all(alert.agentId, windowStart, alert.timestamp).map((e: any) => {
+      const parsed = JSON.parse(e.data);
+      return {
+        timestamp: e.timestamp,
+        error: parsed.error || parsed.message || "Unknown error",
+        raw: parsed,
+      };
+    });
+  } else if (alert.type === "stuck") {
+    // Stuck agent: show how long it's been stuck and last heartbeat
+    if (agent) {
+      const stuckSince = new Date(agent.lastHeartbeat);
+      const stuckDurationMs = new Date(alert.timestamp).getTime() - stuckSince.getTime();
+      context = {
+        lastHeartbeat: agent.lastHeartbeat,
+        stuckDurationMs,
+        stuckDurationMinutes: Math.round(stuckDurationMs / 60000),
+        agentStatus: agent.status,
+      };
+    }
+  } else if (alert.type === "cost_spike") {
+    // Cost threshold: show current spend and threshold
+    const COST_THRESHOLD_USD = parseFloat(process.env.COST_THRESHOLD_USD || "10");
+    context = {
+      currentCostUsd: agent?.costUsd || 0,
+      thresholdUsd: COST_THRESHOLD_USD,
+      overage: (agent?.costUsd || 0) - COST_THRESHOLD_USD,
+    };
+  }
+
+  res.json({
+    alert,
+    agent: agent ? { id: agent.id, name: agent.name, status: agent.status } : null,
+    relatedErrors,
+    context,
+  });
+});
+
 // ---------- Sessions (from JSONL files) ----------
 
 router.get("/sessions", async (req: Request, res: Response) => {

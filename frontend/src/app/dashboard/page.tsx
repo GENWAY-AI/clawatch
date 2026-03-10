@@ -226,6 +226,8 @@ function DashboardContent() {
   const [version, setVersion] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [hiddenAgentSeries, setHiddenAgentSeries] = useState<Set<string>>(new Set());
+  const [hiddenProjectSeries, setHiddenProjectSeries] = useState<Set<string>>(new Set());
 
   const selectedProfile = searchParams.get("profile") || "default";
   const analyticsGroupBy = (searchParams.get("groupBy") as "day" | "week") || "day";
@@ -1104,7 +1106,7 @@ function DashboardContent() {
                         <AreaChart data={analyticsData.buckets}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                           <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
-                          <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                          <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                           <Tooltip
                             contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
                             labelStyle={{ color: "#a1a1aa" }}
@@ -1121,6 +1123,65 @@ function DashboardContent() {
                           <Area type="monotone" dataKey="tokenCount" stroke="transparent" fill="transparent" />
                           <Area type="monotone" dataKey="sessionCount" stroke="transparent" fill="transparent" />
                         </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Usage by Project — moved under Total per Gal's request */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold">Usage by Project</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {(() => {
+                          const projectColors = ["#f59e0b", "#ef4444", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1"];
+                          const dates = analyticsData.buckets.map((b) => b.date);
+                          const merged = dates.map((date) => {
+                            const row: Record<string, string | number> = { date };
+                            for (const proj of analyticsData.byProject) {
+                              const bucket = proj.buckets.find((b) => b.date === date);
+                              row[proj.name] = bucket?.costUsd ?? 0;
+                            }
+                            return row;
+                          });
+                          return (
+                            <AreaChart data={merged}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                              <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
+                              <Tooltip
+                                contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
+                                labelStyle={{ color: "#a1a1aa" }}
+                                labelFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                                formatter={(value, name) => [`$${Number(value).toFixed(2)}`, String(name)]}
+                              />
+                              <Legend
+                                wrapperStyle={{ color: "#a1a1aa", fontSize: 12, cursor: "pointer" }}
+                                onClick={(e) => {
+                                  const key = String(e.dataKey);
+                                  setHiddenProjectSeries((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(key)) next.delete(key); else next.add(key);
+                                    return next;
+                                  });
+                                }}
+                                formatter={(value) => (
+                                  <span style={{ color: hiddenProjectSeries.has(String(value)) ? "#52525b" : "#a1a1aa", textDecoration: hiddenProjectSeries.has(String(value)) ? "line-through" : "none" }}>{String(value)}</span>
+                                )}
+                              />
+                              {analyticsData.byProject.map((proj, i) => {
+                                const color = projectColors[i % projectColors.length];
+                                const hidden = hiddenProjectSeries.has(proj.name);
+                                return (
+                                  <Area key={proj.projectId} type="monotone" dataKey={proj.name} stackId="1" stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.3} strokeWidth={2} />
+                                );
+                              })}
+                            </AreaChart>
+                          );
+                        })()}
                       </ResponsiveContainer>
                     </div>
                   </CardContent>
@@ -1154,63 +1215,32 @@ function DashboardContent() {
                             <AreaChart data={merged}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                               <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
-                              <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                              <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                               <Tooltip
                                 contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
                                 labelStyle={{ color: "#a1a1aa" }}
                                 labelFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
                                 formatter={(value, name) => [`$${Number(value).toFixed(2)}`, String(name)]}
                               />
-                              <Legend wrapperStyle={{ color: "#a1a1aa", fontSize: 12 }} />
+                              <Legend
+                                wrapperStyle={{ color: "#a1a1aa", fontSize: 12, cursor: "pointer" }}
+                                onClick={(e) => {
+                                  const key = String(e.dataKey);
+                                  setHiddenAgentSeries((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(key)) next.delete(key); else next.add(key);
+                                    return next;
+                                  });
+                                }}
+                                formatter={(value) => (
+                                  <span style={{ color: hiddenAgentSeries.has(String(value)) ? "#52525b" : "#a1a1aa", textDecoration: hiddenAgentSeries.has(String(value)) ? "line-through" : "none" }}>{String(value)}</span>
+                                )}
+                              />
                               {analyticsData.byAgent.map((agent, i) => {
                                 const color = agentChartColors[agent.agentId] || defaultColors[i % defaultColors.length];
+                                const hidden = hiddenAgentSeries.has(agent.agentId);
                                 return (
-                                  <Area key={agent.agentId} type="monotone" dataKey={agent.agentId} stackId="1" stroke={color} fill={color} fillOpacity={0.3} strokeWidth={2} />
-                                );
-                              })}
-                            </AreaChart>
-                          );
-                        })()}
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Usage by Project */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base font-semibold">Usage by Project</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-[300px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        {(() => {
-                          const projectColors = ["#f59e0b", "#f97316", "#fb7185", "#e879f9", "#a78bfa"];
-                          const dates = analyticsData.buckets.map((b) => b.date);
-                          const merged = dates.map((date) => {
-                            const row: Record<string, string | number> = { date };
-                            for (const proj of analyticsData.byProject) {
-                              const bucket = proj.buckets.find((b) => b.date === date);
-                              row[proj.name] = bucket?.costUsd ?? 0;
-                            }
-                            return row;
-                          });
-                          return (
-                            <AreaChart data={merged}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
-                              <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-                              <Tooltip
-                                contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
-                                labelStyle={{ color: "#a1a1aa" }}
-                                labelFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                                formatter={(value, name) => [`$${Number(value).toFixed(2)}`, String(name)]}
-                              />
-                              <Legend wrapperStyle={{ color: "#a1a1aa", fontSize: 12 }} />
-                              {analyticsData.byProject.map((proj, i) => {
-                                const color = projectColors[i % projectColors.length];
-                                return (
-                                  <Area key={proj.projectId} type="monotone" dataKey={proj.name} stackId="1" stroke={color} fill={color} fillOpacity={0.3} strokeWidth={2} />
+                                  <Area key={agent.agentId} type="monotone" dataKey={agent.agentId} stackId="1" stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.3} strokeWidth={2} />
                                 );
                               })}
                             </AreaChart>

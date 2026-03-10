@@ -435,7 +435,7 @@ router.get("/alerts/:id/details", (req: Request, res: Response) => {
     agent: agent ? { id: agent.id, name: agent.name, status: agent.status } : null,
     relatedErrors,
     context,
-    summary,
+    title: summary,
     description,
   });
 });

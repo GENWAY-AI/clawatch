@@ -425,17 +425,16 @@ export async function syncAllData(): Promise<void> {
     }
 
     db.transaction(() => {
+      // Clear all auto-project session associations first (fresh re-match)
+      // This ensures stale matches from previous runs are removed
+      db.prepare("DELETE FROM project_sessions WHERE projectId LIKE 'auto_%'").run();
+
       for (const [projectId, project] of detectedProjects) {
         const nowStr = new Date().toISOString();
         upsertProject.run(projectId, project.name, nowStr, nowStr);
         for (const sessionId of project.sessionIds) {
           // Skip sessions that are manually tagged (unless they already have this auto-project)
-          if (manuallyTagged.has(sessionId)) {
-            const existing = db.prepare(
-              "SELECT 1 FROM project_sessions WHERE projectId = ? AND sessionId = ?"
-            ).get(projectId, sessionId);
-            if (!existing) continue;
-          }
+          if (manuallyTagged.has(sessionId)) continue;
           upsertProjectSession.run(projectId, sessionId, nowStr);
         }
       }

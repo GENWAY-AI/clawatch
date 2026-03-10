@@ -16,6 +16,7 @@ export interface SessionSummary {
   startedAt: string;
   lastActivityAt: string;
   duration: number;
+  costByModel: Array<{ model: string; costUsd: number; tokenCount: number }>;
 }
 
 export interface SessionDetailMessage {
@@ -31,7 +32,6 @@ export interface SessionDetailMessage {
 }
 
 export interface SessionDetail extends SessionSummary {
-  costByModel: Array<{ model: string; costUsd: number; tokenCount: number }>;
   tokenBreakdown: { input: number; output: number; cacheRead: number; cacheWrite: number };
   messages: SessionDetailMessage[];
 }
@@ -203,17 +203,18 @@ async function parseSessionFile(
         costUsd += msgCost;
         tokenCount += msgTokens;
 
+        // Always track cost by model (needed for /api/costs breakdown)
+        const modelKey = msg.model || "unknown";
+        const existing = costByModel.get(modelKey) || { costUsd: 0, tokenCount: 0 };
+        existing.costUsd += msgCost;
+        existing.tokenCount += msgTokens;
+        costByModel.set(modelKey, existing);
+
         if (collectMessages) {
           tokenBreakdown.input += u.input || 0;
           tokenBreakdown.output += u.output || 0;
           tokenBreakdown.cacheRead += u.cacheRead || 0;
           tokenBreakdown.cacheWrite += u.cacheWrite || 0;
-
-          const modelKey = msg.model || "unknown";
-          const existing = costByModel.get(modelKey) || { costUsd: 0, tokenCount: 0 };
-          existing.costUsd += msgCost;
-          existing.tokenCount += msgTokens;
-          costByModel.set(modelKey, existing);
         }
       }
 
@@ -259,6 +260,12 @@ async function parseSessionFile(
 
   if (!firstTimestamp) return null;
 
+  const costByModelArray = Array.from(costByModel.entries()).map(([m, v]) => ({
+    model: m,
+    costUsd: v.costUsd,
+    tokenCount: v.tokenCount,
+  }));
+
   const summary: SessionSummary = {
     id: sessionId,
     agentId,
@@ -271,6 +278,7 @@ async function parseSessionFile(
     startedAt: firstTimestamp,
     lastActivityAt: lastTimestamp,
     duration: new Date(lastTimestamp).getTime() - new Date(firstTimestamp).getTime(),
+    costByModel: costByModelArray,
   };
 
   if (!collectMessages) return { summary };
@@ -278,11 +286,6 @@ async function parseSessionFile(
   return {
     summary,
     detail: {
-      costByModel: Array.from(costByModel.entries()).map(([m, v]) => ({
-        model: m,
-        costUsd: v.costUsd,
-        tokenCount: v.tokenCount,
-      })),
       tokenBreakdown,
       messages,
     },

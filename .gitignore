@@ -9,3 +9,4 @@ dist/
 *.pid
 .env.local
 *.db
+*.tgz

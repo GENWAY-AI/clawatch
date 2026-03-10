@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuid } from "uuid";
 import db from "./db";
-import { listSessions, getSessionDetail } from "./sessions";
+import { listSessions, getSessionDetail, SessionSummary } from "./sessions";
 import {
   createProject,
   listProjects,
@@ -125,53 +125,64 @@ router.post("/events", (req: Request, res: Response) => {
 
 // ---------- Costs ----------
 
-router.get("/costs", (req: Request, res: Response) => {
-  const { agentId, from, to } = req.query;
+router.get("/costs", async (req: Request, res: Response) => {
+  try {
+    const { agentId, from, to } = req.query;
 
-  let agentFilter = "";
-  const params: any[] = [];
+    // Get sessions (cached, authoritative source from JSONL files)
+    let sessions = await listSessions();
 
-  if (agentId) {
-    agentFilter = " WHERE agentId = ?";
-    params.push(agentId);
+    // Apply filters
+    if (agentId) {
+      sessions = sessions.filter((s) => s.agentId === agentId);
+    }
+    if (from) {
+      sessions = sessions.filter((s) => s.lastActivityAt >= (from as string));
+    }
+    if (to) {
+      sessions = sessions.filter((s) => s.startedAt <= (to as string));
+    }
+
+    // Aggregate by agent
+    const agentMap = new Map<string, { agentId: string; name: string; costUsd: number; tokenCount: number }>();
+    // Aggregate by model
+    const modelMap = new Map<string, { model: string; costUsd: number; tokenCount: number }>();
+
+    for (const session of sessions) {
+      // By agent
+      const existing = agentMap.get(session.agentId);
+      if (existing) {
+        existing.costUsd += session.costUsd;
+        existing.tokenCount += session.tokenCount;
+      } else {
+        agentMap.set(session.agentId, {
+          agentId: session.agentId,
+          name: session.agentId,
+          costUsd: session.costUsd,
+          tokenCount: session.tokenCount,
+        });
+      }
+
+      // By model — use costByModel from session summary
+      for (const mc of session.costByModel) {
+        const em = modelMap.get(mc.model);
+        if (em) {
+          em.costUsd += mc.costUsd;
+          em.tokenCount += mc.tokenCount;
+        } else {
+          modelMap.set(mc.model, { model: mc.model, costUsd: mc.costUsd, tokenCount: mc.tokenCount });
+        }
+      }
+    }
+
+    const byAgent = Array.from(agentMap.values()).sort((a, b) => b.costUsd - a.costUsd);
+    const byModel = Array.from(modelMap.values()).sort((a, b) => b.costUsd - a.costUsd);
+    const totalUsd = byAgent.reduce((sum, a) => sum + a.costUsd, 0);
+
+    res.json({ totalUsd, byAgent, byModel });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to get costs" });
   }
-
-  // By agent
-  const byAgent = db.prepare(`
-    SELECT a.id as agentId, a.name, a.costUsd, a.tokenCount
-    FROM agents a ${agentId ? "WHERE a.id = ?" : ""}
-    ORDER BY a.costUsd DESC
-  `).all(...(agentId ? [agentId] : [])) as any[];
-
-  // By model — query events with cost data
-  let modelQuery = `
-    SELECT json_extract(data, '$.model') as model,
-           SUM(json_extract(data, '$.costUsd')) as costUsd,
-           SUM(json_extract(data, '$.tokenCount')) as tokenCount
-    FROM events
-    WHERE type = 'cost'
-  `;
-  const modelParams: any[] = [];
-
-  if (agentId) {
-    modelQuery += " AND agentId = ?";
-    modelParams.push(agentId);
-  }
-  if (from) {
-    modelQuery += " AND timestamp >= ?";
-    modelParams.push(from);
-  }
-  if (to) {
-    modelQuery += " AND timestamp <= ?";
-    modelParams.push(to);
-  }
-  modelQuery += " GROUP BY model";
-
-  const byModel = db.prepare(modelQuery).all(...modelParams) as any[];
-
-  const totalUsd = byAgent.reduce((sum: number, a: any) => sum + (a.costUsd || 0), 0);
-
-  res.json({ totalUsd, byAgent, byModel });
 });
 
 // ---------- Alerts ----------

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile, AnalyticsData, SpendData, CostLimits } from "@/lib/types";
 import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics, getSpend, setCostLimits } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -798,11 +798,11 @@ function DashboardContent() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">${spendData?.today.toFixed(2) ?? "—"}</div>
-              {spendData?.limits.type === "daily" && spendData.limits.amount && (
+              {spendData?.limits.type === "daily" && spendData.limits.amount ? (
                 <div className="mt-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                     <span>{((spendData.today / spendData.limits.amount) * 100).toFixed(0)}%</span>
-                    <span>of ${spendData.limits.amount} limit</span>
+                    <span>Daily limit: ${spendData.limits.amount}</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
                     <div
@@ -817,7 +817,9 @@ function DashboardContent() {
                     />
                   </div>
                 </div>
-              )}
+              ) : spendData && Object.keys(spendData.limits.agentLimits).length > 0 ? (
+                <div className="mt-2 text-[11px] text-muted-foreground/60">Per-agent limits active</div>
+              ) : null}
             </CardContent>
           </Card>
           <Card>
@@ -835,11 +837,11 @@ function DashboardContent() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">${spendData?.mtd.toFixed(2) ?? "—"}</div>
-              {spendData?.limits.type === "monthly" && spendData.limits.amount && (
+              {spendData?.limits.type === "monthly" && spendData.limits.amount ? (
                 <div className="mt-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                     <span>{((spendData.mtd / spendData.limits.amount) * 100).toFixed(0)}%</span>
-                    <span>of ${spendData.limits.amount} limit</span>
+                    <span>Monthly limit: ${spendData.limits.amount}</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
                     <div
@@ -854,7 +856,9 @@ function DashboardContent() {
                     />
                   </div>
                 </div>
-              )}
+              ) : spendData && Object.keys(spendData.limits.agentLimits).length > 0 ? (
+                <div className="mt-2 text-[11px] text-muted-foreground/60">Per-agent limits active</div>
+              ) : null}
             </CardContent>
           </Card>
           <Card
@@ -991,15 +995,48 @@ function DashboardContent() {
                       </div>
 
                       {/* Status badge */}
-                      <Badge variant="outline" className={`${sc.color} border text-xs`}>
-                        {sc.label}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={`${sc.color} border text-xs`}>
+                          {sc.label}
+                        </Badge>
+                        {agent.overLimit && (
+                          <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/20 border text-xs">
+                            ⚠️ Over limit
+                          </Badge>
+                        )}
+                      </div>
 
                       {/* Stats */}
                       <div className="flex items-center gap-6 ml-auto text-sm text-muted-foreground">
                         <div className="text-right min-w-[80px]">
                           <div className="text-foreground font-medium">${agent.costUsd.toFixed(2)}</div>
                           <div className="text-xs">cost</div>
+                          {(agent.todaySpend != null || agent.mtdSpend != null) && (
+                            <div className="text-[11px] text-muted-foreground/60 mt-0.5">
+                              {agent.todaySpend != null && <span>today ${agent.todaySpend.toFixed(2)}</span>}
+                              {agent.todaySpend != null && agent.mtdSpend != null && <span> · </span>}
+                              {agent.mtdSpend != null && <span>mtd ${agent.mtdSpend.toFixed(2)}</span>}
+                            </div>
+                          )}
+                          {agent.limit != null && (
+                            <div className="mt-1 min-w-[80px]">
+                              <div className="text-[11px] text-muted-foreground/60 mb-0.5">
+                                {agent.limitType === "daily" ? "Daily" : "Monthly"}: ${agent.limit}
+                              </div>
+                              <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    (agent.usagePercent ?? 0) > 80
+                                      ? "bg-red-500"
+                                      : (agent.usagePercent ?? 0) > 60
+                                        ? "bg-amber-500"
+                                        : "bg-emerald-500"
+                                  }`}
+                                  style={{ width: `${Math.min(100, agent.usagePercent ?? 0)}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <div className="text-right min-w-[80px]">
                           <div className="text-foreground font-medium">{formatTokens(agent.tokenCount)}</div>
@@ -1597,6 +1634,14 @@ function DashboardContent() {
                             }}
                           />
                           <Area type="monotone" dataKey="costUsd" stroke="#10b981" fill="#10b981" fillOpacity={0.3} strokeWidth={2} />
+                          {spendData?.limits?.amount && (
+                            <ReferenceLine
+                              y={spendData.limits.amount}
+                              stroke="#ef4444"
+                              strokeDasharray="6 3"
+                              label={{ value: `Limit: $${spendData.limits.amount}`, position: "insideTopRight", fill: "#ef4444", fontSize: 11 }}
+                            />
+                          )}
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>

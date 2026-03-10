@@ -13,6 +13,12 @@ export interface Agent {
   costUsd: number;
   tokenCount: number;
   errorCount: number;
+  todaySpend?: number;
+  mtdSpend?: number;
+  limit?: number;
+  limitType?: string;
+  usagePercent?: number;
+  overLimit?: boolean;
 }
 
 export interface AgentDetail extends Agent {
@@ -192,6 +198,8 @@ export interface SpendData {
   byAgent: Record<string, { today: number; mtd: number }>;
   limits: CostLimits;
   usagePercent: number | null;
+  periodLabel?: string;
+  currentSpend?: number;
 }
 
 export interface CostLimits {

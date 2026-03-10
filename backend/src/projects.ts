@@ -254,6 +254,60 @@ export function removeSessionFromProject(projectId: string, sessionId: string): 
   return false;
 }
 
+// ---------- Session tagging (many-to-many) ----------
+
+export function setSessionProjects(sessionId: string, projectIds: string[]): void {
+  const now = new Date().toISOString();
+  db.transaction(() => {
+    db.prepare("DELETE FROM project_sessions WHERE sessionId = ?").run(sessionId);
+    const insert = db.prepare(
+      "INSERT OR IGNORE INTO project_sessions (projectId, sessionId, addedAt) VALUES (?, ?, ?)"
+    );
+    for (const projectId of projectIds) {
+      insert.run(projectId, sessionId, now);
+    }
+    // Update updatedAt for affected projects
+    const update = db.prepare("UPDATE projects SET updatedAt = ? WHERE id = ?");
+    for (const projectId of projectIds) {
+      update.run(now, projectId);
+    }
+  })();
+}
+
+export function getSessionProjects(sessionId: string): Project[] {
+  return db.prepare(`
+    SELECT p.id, p.name, p.description, p.createdAt, p.updatedAt
+    FROM projects p
+    JOIN project_sessions ps ON p.id = ps.projectId
+    WHERE ps.sessionId = ?
+    ORDER BY p.name
+  `).all(sessionId) as Project[];
+}
+
+export function bulkGetSessionProjects(sessionIds: string[]): Map<string, Array<{ id: string; name: string }>> {
+  const result = new Map<string, Array<{ id: string; name: string }>>();
+  if (sessionIds.length === 0) return result;
+
+  // Query all project tags for the given session IDs
+  const placeholders = sessionIds.map(() => "?").join(", ");
+  const rows = db.prepare(`
+    SELECT ps.sessionId, p.id, p.name
+    FROM project_sessions ps
+    JOIN projects p ON p.id = ps.projectId
+    WHERE ps.sessionId IN (${placeholders})
+    ORDER BY p.name
+  `).all(...sessionIds) as Array<{ sessionId: string; id: string; name: string }>;
+
+  for (const row of rows) {
+    if (!result.has(row.sessionId)) {
+      result.set(row.sessionId, []);
+    }
+    result.get(row.sessionId)!.push({ id: row.id, name: row.name });
+  }
+
+  return result;
+}
+
 export async function suggestRelatedSessions(sessionId: string): Promise<SessionSummary[]> {
   const allSessions = await listSessions();
   const target = allSessions.find((s) => s.id === sessionId);

@@ -11,6 +11,9 @@ import {
   addSessionToProject,
   removeSessionFromProject,
   suggestRelatedSessions,
+  setSessionProjects,
+  getSessionProjects,
+  bulkGetSessionProjects,
 } from "./projects";
 
 const router = Router();
@@ -367,7 +370,15 @@ router.get("/sessions", async (req: Request, res: Response) => {
     const max = Math.min(parseInt(limitStr as string, 10) || 50, 500);
     sessions = sessions.slice(0, max);
 
-    res.json({ sessions });
+    // Attach project tags to each session
+    const sessionIds = sessions.map((s) => s.id);
+    const projectTags = bulkGetSessionProjects(sessionIds);
+    const sessionsWithProjects = sessions.map((s) => ({
+      ...s,
+      projects: projectTags.get(s.id) || [],
+    }));
+
+    res.json({ sessions: sessionsWithProjects });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to list sessions" });
   }
@@ -396,6 +407,32 @@ router.get("/sessions/:id/suggestions", async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to get suggestions" });
   }
+});
+
+// ---------- Session Project Tags ----------
+
+router.put("/sessions/:id/projects", (req: Request, res: Response) => {
+  const { projectIds } = req.body;
+  if (!Array.isArray(projectIds)) {
+    res.status(400).json({ error: "projectIds must be an array" });
+    return;
+  }
+  setSessionProjects(req.params.id as string, projectIds);
+  res.json({ ok: true });
+});
+
+router.delete("/sessions/:id/projects/:projectId", (req: Request, res: Response) => {
+  const ok = removeSessionFromProject(req.params.projectId as string, req.params.id as string);
+  if (!ok) {
+    res.status(404).json({ error: "Project tag not found on session" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+router.get("/sessions/:id/projects", (req: Request, res: Response) => {
+  const projects = getSessionProjects(req.params.id as string);
+  res.json({ projects });
 });
 
 // ---------- Projects ----------

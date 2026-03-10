@@ -229,3 +229,18 @@ export async function removeSessionFromProject(projectId: string, sessionId: str
     method: "DELETE",
   });
 }
+
+export async function setSessionProjects(sessionId: string, projectIds: string[]): Promise<void> {
+  if (USE_MOCK) return;
+  await fetchJson(`/api/sessions/${sessionId}/projects`, {
+    method: "PUT",
+    body: JSON.stringify({ projectIds }),
+  });
+}
+
+export async function removeSessionProject(sessionId: string, projectId: string): Promise<void> {
+  if (USE_MOCK) return;
+  await fetchJson(`/api/sessions/${sessionId}/projects/${projectId}`, {
+    method: "DELETE",
+  });
+}

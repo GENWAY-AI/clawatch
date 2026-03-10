@@ -57,6 +57,7 @@ export interface Session {
   lastActivityAt: string;
   duration: number;
   profile?: string;
+  projects?: Array<{ id: string; name: string }>;
 }
 
 export interface SessionDetail extends Session {

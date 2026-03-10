@@ -1,13 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile } from "@/lib/types";
-import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion } from "@/lib/api";
+import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 
 function formatRelativeTime(iso: string): string {
@@ -61,6 +61,91 @@ type SessionSort = "recent" | "cost" | "tokens";
 type AlertFilter = "all" | "critical" | "warning" | "info";
 
 const ALERTS_PER_PAGE = 5;
+
+function ProjectTagChips({
+  session,
+  allProjects,
+  onAdd,
+  onRemove,
+}: {
+  session: Session;
+  allProjects: Project[];
+  onAdd: (projectId: string) => void;
+  onRemove: (projectId: string) => void;
+}) {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const sessionProjects = session.projects ?? [];
+  const taggedIds = new Set(sessionProjects.map((p) => p.id));
+  const available = allProjects.filter((p) => !taggedIds.has(p.id));
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showDropdown]);
+
+  if (sessionProjects.length === 0 && available.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-1.5 group/tags">
+      {sessionProjects.map((proj) => (
+        <span
+          key={proj.id}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"
+        >
+          {proj.name}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(proj.id);
+            }}
+            className="hover:text-amber-200 transition-colors ml-0.5 leading-none"
+          >
+            &times;
+          </button>
+        </span>
+      ))}
+      {available.length > 0 && (
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowDropdown(!showDropdown);
+            }}
+            className="inline-flex items-center justify-center size-5 rounded-full border border-dashed border-zinc-600 text-zinc-500 hover:border-amber-500/40 hover:text-amber-400 transition-colors text-[11px] opacity-0 group-hover/tags:opacity-100 focus:opacity-100"
+            title="Add project tag"
+          >
+            +
+          </button>
+          {showDropdown && (
+            <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border/50 bg-zinc-900 shadow-lg py-1">
+              {available.map((proj) => (
+                <button
+                  key={proj.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdd(proj.id);
+                    setShowDropdown(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-amber-500/10 hover:text-amber-400 transition-colors"
+                >
+                  {proj.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   return (
@@ -715,6 +800,45 @@ function DashboardContent() {
                             {formatRelativeTime(session.lastActivityAt)}
                           </span>
                         </div>
+                        <ProjectTagChips
+                          session={session}
+                          allProjects={projects}
+                          onRemove={async (projectId) => {
+                            const prev = session.projects ?? [];
+                            setSessions((s) =>
+                              s.map((sess) =>
+                                sess.id === session.id
+                                  ? { ...sess, projects: prev.filter((p) => p.id !== projectId) }
+                                  : sess
+                              )
+                            );
+                            try {
+                              await removeSessionProject(session.id, projectId);
+                            } catch {
+                              setSessions((s) =>
+                                s.map((sess) => (sess.id === session.id ? { ...sess, projects: prev } : sess))
+                              );
+                            }
+                          }}
+                          onAdd={async (projectId) => {
+                            const proj = projects.find((p) => p.id === projectId);
+                            if (!proj) return;
+                            const prev = session.projects ?? [];
+                            const next = [...prev, { id: proj.id, name: proj.name }];
+                            setSessions((s) =>
+                              s.map((sess) =>
+                                sess.id === session.id ? { ...sess, projects: next } : sess
+                              )
+                            );
+                            try {
+                              await setSessionProjects(session.id, next.map((p) => p.id));
+                            } catch {
+                              setSessions((s) =>
+                                s.map((sess) => (sess.id === session.id ? { ...sess, projects: prev } : sess))
+                              );
+                            }
+                          }}
+                        />
                       </div>
 
                       {/* Right stats */}

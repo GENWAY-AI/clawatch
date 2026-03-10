@@ -187,14 +187,69 @@ router.get("/costs", async (req: Request, res: Response) => {
 
 // ---------- Alerts ----------
 
-router.get("/alerts", (_req: Request, res: Response) => {
+router.get("/alerts", (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 5, 1), 100);
+  const offset = Math.max(parseInt(req.query.offset as string, 10) || 0, 0);
+  const severityParam = req.query.severity as string | undefined;
+  const acknowledgedParam = req.query.acknowledged as string | undefined;
+  const agentIdParam = req.query.agentId as string | undefined;
+
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (severityParam) {
+    const severities = severityParam.split(",").map((s) => s.trim());
+    conditions.push(`severity IN (${severities.map(() => "?").join(", ")})`);
+    params.push(...severities);
+  }
+
+  if (acknowledgedParam === "true") {
+    conditions.push("acknowledged = 1");
+  } else if (acknowledgedParam === "false") {
+    conditions.push("acknowledged = 0");
+  }
+
+  if (agentIdParam) {
+    conditions.push("agentId = ?");
+    params.push(agentIdParam);
+  }
+
+  const where = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
+
+  const total = (db.prepare(`SELECT COUNT(*) as cnt FROM alerts${where}`).get(...params) as any).cnt;
+
   const alerts = db.prepare(
-    "SELECT * FROM alerts ORDER BY timestamp DESC LIMIT 100"
-  ).all().map((a: any) => ({
+    `SELECT * FROM alerts${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset).map((a: any) => ({
     ...a,
     acknowledged: Boolean(a.acknowledged),
   }));
-  res.json({ alerts });
+
+  res.json({ alerts, total });
+});
+
+router.post("/alerts/acknowledge-all", (req: Request, res: Response) => {
+  const severityParam = req.query.severity as string | undefined;
+  const agentIdParam = req.query.agentId as string | undefined;
+
+  const conditions: string[] = ["acknowledged = 0"];
+  const params: any[] = [];
+
+  if (severityParam) {
+    const severities = severityParam.split(",").map((s) => s.trim());
+    conditions.push(`severity IN (${severities.map(() => "?").join(", ")})`);
+    params.push(...severities);
+  }
+
+  if (agentIdParam) {
+    conditions.push("agentId = ?");
+    params.push(agentIdParam);
+  }
+
+  const where = ` WHERE ${conditions.join(" AND ")}`;
+  const result = db.prepare(`UPDATE alerts SET acknowledged = 1${where}`).run(...params);
+
+  res.json({ ok: true, count: result.changes });
 });
 
 router.post("/alerts/:id/acknowledge", (req: Request, res: Response) => {

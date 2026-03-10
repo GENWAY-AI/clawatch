@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project } from "@/lib/types";
-import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, getAlertDetails, getSessions, getProjects, createProject } from "@/lib/api";
+import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 
 function formatRelativeTime(iso: string): string {
@@ -58,50 +58,78 @@ const severityConfig: Record<AlertSeverity, { color: string; icon: string }> = {
 type Tab = "agents" | "sessions" | "projects";
 type SessionFilter = "all" | "active" | "idle" | "completed";
 type SessionSort = "recent" | "cost" | "tokens";
+type AlertFilter = "all" | "critical" | "warning" | "info";
+
+const ALERTS_PER_PAGE = 5;
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <div className="size-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          Loading dashboard...
+        </div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("agents");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alertsTotal, setAlertsTotal] = useState(0);
+  const [allAlerts, setAllAlerts] = useState<Alert[]>([]);
   const [costs, setCosts] = useState<CostData | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [sessionFilter, setSessionFilter] = useState<SessionFilter>("active");
   const [sessionSort, setSessionSort] = useState<SessionSort>("recent");
   const [showIdleAgents, setShowIdleAgents] = useState(false);
+  const [alertFilter, setAlertFilter] = useState<AlertFilter>("all");
+  const [alertPage, setAlertPage] = useState(1);
+  const [ackAllLoading, setAckAllLoading] = useState(false);
+  const [expandedAlerts, setExpandedAlerts] = useState<Record<string, AlertDetails | "loading">>({});
+  const expandedAlertsRef = useRef(expandedAlerts);
+  expandedAlertsRef.current = expandedAlerts;
   const [loading, setLoading] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
-  const [expandedAlerts, setExpandedAlerts] = useState<Record<string, AlertDetails | "loading">>({});
-  const expandedAlertsRef = useRef(expandedAlerts);
-  expandedAlertsRef.current = expandedAlerts;
 
   const fetchData = useCallback(async () => {
     try {
       const agentStatus = showIdleAgents ? "all" : undefined;
       const sessStatus = sessionFilter === "all" ? "all" : sessionFilter === "active" ? undefined : sessionFilter;
-      const [a, al, c, s, p] = await Promise.all([
+      const severityParam = alertFilter !== "all" ? (alertFilter as AlertSeverity) : undefined;
+      const offset = (alertPage - 1) * ALERTS_PER_PAGE;
+      const [a, al, allAl, c, s, p] = await Promise.all([
         getAgents(agentStatus),
+        getAlerts({ limit: ALERTS_PER_PAGE, offset, severity: severityParam }),
         getAlerts(),
         getCosts(),
         getSessions(undefined, sessStatus, sessionSort),
         getProjects(),
       ]);
       setAgents(a);
-      // Skip alerts update while any alert is expanded to prevent re-render collapse
       const hasExpanded = Object.keys(expandedAlertsRef.current).length > 0;
       if (!hasExpanded) {
-        setAlerts(al);
+        setAlerts(al.alerts ?? al);
+        setAlertsTotal(al.total ?? 0);
       }
+      setAllAlerts(allAl.alerts ?? allAl);
       setCosts(c);
       setSessions(s);
       setProjects(p);
     } finally {
       setLoading(false);
     }
-  }, [showIdleAgents, sessionFilter, sessionSort]);
+  }, [showIdleAgents, sessionFilter, sessionSort, alertFilter, alertPage]);
 
   useEffect(() => {
     fetchData();
@@ -109,8 +137,10 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const unackedAlerts = alerts.filter((a) => !a.acknowledged);
+  const unackedAlerts = allAlerts.filter((a) => !a.acknowledged);
   const criticalAlerts = unackedAlerts.filter((a) => a.severity === "critical" || a.severity === "warning");
+  const bannerAlerts = criticalAlerts.slice(0, 3);
+  const hiddenBannerCount = criticalAlerts.length - bannerAlerts.length;
   const runningCount = agents.filter((a) => a.status === "running" || a.status === "active").length;
   const totalCost = costs?.totalUsd ?? 0;
 
@@ -127,6 +157,30 @@ export default function DashboardPage() {
   async function handleAcknowledge(alertId: string) {
     await acknowledgeAlert(alertId);
     setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, acknowledged: true } : a)));
+    setAllAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, acknowledged: true } : a)));
+  }
+
+  async function handleAcknowledgeAll() {
+    setAckAllLoading(true);
+    const severityParam = alertFilter !== "all" ? (alertFilter as AlertSeverity) : undefined;
+    // Optimistic update
+    const prevAlerts = alerts;
+    const prevAllAlerts = allAlerts;
+    setAlerts((prev) => prev.map((a) => ({ ...a, acknowledged: true })));
+    setAllAlerts((prev) =>
+      prev.map((a) =>
+        !severityParam || a.severity === severityParam ? { ...a, acknowledged: true } : a
+      )
+    );
+    try {
+      await acknowledgeAllAlerts(severityParam);
+    } catch {
+      // Rollback on error
+      setAlerts(prevAlerts);
+      setAllAlerts(prevAllAlerts);
+    } finally {
+      setAckAllLoading(false);
+    }
   }
 
   async function handleToggleAlertDetails(alertId: string) {
@@ -188,87 +242,34 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Alert Banner */}
-        {criticalAlerts.length > 0 && (
+        {bannerAlerts.length > 0 && (
           <div className="space-y-2">
-            {criticalAlerts.map((alert) => {
-              const expanded = expandedAlerts[alert.id];
-              const isExpanded = !!expanded;
-              const isLoading = expanded === "loading";
-              const details = expanded && expanded !== "loading" ? expanded : null;
-              return (
-                <div
-                  key={alert.id}
-                  className={`rounded-lg border text-sm overflow-hidden ${
-                    alert.severity === "critical"
-                      ? "border-red-500/30 bg-red-500/5 text-red-400"
-                      : "border-amber-500/30 bg-amber-500/5 text-amber-400"
-                  }`}
-                >
-                  <div
-                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
-                    onClick={() => handleToggleAlertDetails(alert.id)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <svg
-                        className={`size-4 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                        stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                      </svg>
-                      <span className="font-mono text-xs font-bold uppercase">
-                        {alert.severity}
-                      </span>
-                      <span>{alert.message}</span>
-                      <span className="text-xs opacity-60">{formatRelativeTime(alert.timestamp)}</span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={(e) => { e.stopPropagation(); handleAcknowledge(alert.id); }}
-                      className="text-current hover:bg-white/10"
-                    >
-                      Acknowledge
-                    </Button>
-                  </div>
-                  {isExpanded && (
-                    <div className="px-4 pb-3 border-t border-white/[0.06]">
-                      {isLoading ? (
-                        <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
-                          <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          Loading details...
-                        </div>
-                      ) : details ? (
-                        <div className="pt-3 space-y-2">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                            <span>Agent:</span>
-                            <span className="font-medium text-foreground">{details.agent.name}</span>
-                          </div>
-                          {details.context?.stuckDurationMinutes != null && (
-                            <div className="text-xs text-amber-400/80 font-mono">
-                              Stuck for {details.context.stuckDurationMinutes}m — last heartbeat {formatRelativeTime(details.context.lastHeartbeat!)}
-                            </div>
-                          )}
-                          {details.context?.currentCostUsd != null && (
-                            <div className="text-xs text-amber-400/80 font-mono">
-                              Current: ${details.context.currentCostUsd.toFixed(2)} / Threshold: ${details.context.thresholdUsd?.toFixed(2)} (+${details.context.overage?.toFixed(2)} over)
-                            </div>
-                          )}
-                          {details.relatedErrors.map((evt, i) => (
-                            <div key={i} className="flex items-start gap-2 text-xs">
-                              <span className="text-muted-foreground shrink-0 w-16">{formatRelativeTime(evt.timestamp)}</span>
-                              <span className="font-mono text-red-300/80 break-all">{evt.error}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
+            {criticalAlerts.map((alert) => (
+              <div
+                key={alert.id}
+                className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${
+                  alert.severity === "critical"
+                    ? "border-red-500/30 bg-red-500/5 text-red-400"
+                    : "border-amber-500/30 bg-amber-500/5 text-amber-400"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs font-bold uppercase">
+                    {alert.severity}
+                  </span>
+                  <span>{alert.message}</span>
+                  <span className="text-xs opacity-60">{formatRelativeTime(alert.timestamp)}</span>
                 </div>
-              );
-            })}
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => handleAcknowledge(alert.id)}
+                  className="text-current hover:bg-white/10"
+                >
+                  Acknowledge
+                </Button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -496,8 +497,37 @@ export default function DashboardPage() {
             )}
 
             {/* All Alerts */}
-            <div>
-              <h2 className="text-lg font-semibold mb-4">All Alerts</h2>
+            <div id="alerts-section">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">All Alerts</h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                  disabled={ackAllLoading || alerts.every((a) => a.acknowledged)}
+                  onClick={handleAcknowledgeAll}
+                >
+                  {ackAllLoading ? "Acknowledging..." : `Acknowledge All${alertFilter !== "all" ? ` ${alertFilter}` : ""}`}
+                </Button>
+              </div>
+
+              {/* Severity Filter Chips */}
+              <div className="flex items-center gap-1 mb-4">
+                {(["all", "critical", "warning", "info"] as AlertFilter[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setAlertFilter(f)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      alertFilter === f
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+
               <Card>
                 <CardContent className="pt-4 space-y-2">
                   {alerts.map((alert) => {
@@ -589,8 +619,40 @@ export default function DashboardPage() {
                       </div>
                     );
                   })}
+                  {alerts.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      No alerts found.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
+
+              {/* Pagination */}
+              {alertsTotal > ALERTS_PER_PAGE && (
+                <div className="flex items-center justify-between mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    disabled={alertPage <= 1}
+                    onClick={() => setAlertPage(alertPage - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Page {alertPage} of {Math.ceil(alertsTotal / ALERTS_PER_PAGE)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    disabled={alertPage >= Math.ceil(alertsTotal / ALERTS_PER_PAGE)}
+                    onClick={() => setAlertPage(alertPage + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
             </div>
           </>
         )}

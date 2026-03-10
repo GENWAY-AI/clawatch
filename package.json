@@ -1,0 +1,8 @@
+{
+  "name": "clawatch-dev",
+  "private": true,
+  "scripts": {
+    "dev": "./scripts/dev.sh",
+    "build": "./scripts/build-npm.sh"
+  }
+}

@@ -54,6 +54,7 @@ function initDb(): void {
     CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
     CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
     CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
 
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,

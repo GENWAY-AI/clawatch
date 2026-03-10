@@ -225,11 +225,62 @@ function checkCostThresholds(): void {
   }
 }
 
+function checkSpendLimits(): void {
+  const limitsRow = db.prepare("SELECT value FROM settings WHERE key = ?").get("cost-limits") as { value: string } | undefined;
+  if (!limitsRow) return;
+  const limits = JSON.parse(limitsRow.value) as { type: string | null; amount: number | null; agentLimits: Record<string, number> };
+  if (!limits.type || !limits.amount) return;
+
+  // Import listSessions dynamically to avoid circular deps
+  const { listSessionsSync } = require("./sessions");
+  const sessions = listSessionsSync() as { agentId: string; startedAt: string; costUsd: number }[];
+  const now = new Date();
+  const periodKey = limits.type === "daily" ? now.toISOString().slice(0, 10) : now.toISOString().slice(0, 7);
+  const sliceLen = limits.type === "daily" ? 10 : 7;
+
+  // Total spend for period
+  const periodSessions = sessions.filter((s) => s.startedAt.slice(0, sliceLen) === periodKey);
+  const totalSpend = periodSessions.reduce((sum, s) => sum + s.costUsd, 0);
+  const pct = (totalSpend / limits.amount) * 100;
+  const periodLabel = limits.type === "daily" ? "today" : "this month";
+
+  // Alert at 80% (warning) — once per period
+  if (pct >= 80 && pct < 100) {
+    if (!recentAlertExists("_global", "spend_warning", limits.type === "daily" ? 86400000 : 2592000000)) {
+      createAndSendAlert("_global", "cost_spike", "warning",
+        `Spend alert: $${totalSpend.toFixed(2)} ${periodLabel} — ${pct.toFixed(0)}% of $${limits.amount} ${limits.type} limit`);
+    }
+  }
+
+  // Alert at 100% (critical) — once per period
+  if (pct >= 100) {
+    if (!recentAlertExists("_global", "spend_critical", limits.type === "daily" ? 86400000 : 2592000000)) {
+      createAndSendAlert("_global", "cost_spike", "critical",
+        `Spend limit exceeded: $${totalSpend.toFixed(2)} ${periodLabel} — ${pct.toFixed(0)}% of $${limits.amount} ${limits.type} limit`);
+    }
+  }
+
+  // Per-agent limits
+  const agentSpend: Record<string, number> = {};
+  for (const s of periodSessions) {
+    agentSpend[s.agentId] = (agentSpend[s.agentId] || 0) + s.costUsd;
+  }
+  for (const [agentId, agentLimit] of Object.entries(limits.agentLimits)) {
+    const spent = agentSpend[agentId] || 0;
+    const agentPct = (spent / agentLimit) * 100;
+    if (agentPct >= 100 && !recentAlertExists(agentId, "spend_critical", limits.type === "daily" ? 86400000 : 2592000000)) {
+      createAndSendAlert(agentId, "cost_spike", "critical",
+        `Agent *${agentId}* exceeded ${limits.type} limit: $${spent.toFixed(2)} / $${agentLimit} ${periodLabel}`);
+    }
+  }
+}
+
 export function runAlertChecker(): void {
   try {
     checkStuckAgents();
     checkErrorSpikes();
     checkCostThresholds();
+    checkSpendLimits();
   } catch (err) {
     console.error("[AlertChecker] Error:", err);
   }

@@ -960,4 +960,84 @@ router.delete("/projects/:id/sessions/:sessionId", (req: Request, res: Response)
   res.json({ ok: true });
 });
 
+// ---------- Settings ----------
+
+const getSetting = db.prepare("SELECT value FROM settings WHERE key = ?");
+const upsertSetting = db.prepare(
+  "INSERT INTO settings (key, value, updatedAt) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt"
+);
+
+router.get("/settings/cost-limits", (_req: Request, res: Response) => {
+  const row = getSetting.get("cost-limits") as { value: string } | undefined;
+  if (!row) {
+    res.json({ type: null, amount: null, agentLimits: {} });
+    return;
+  }
+  res.json(JSON.parse(row.value));
+});
+
+router.put("/settings/cost-limits", (req: Request, res: Response) => {
+  const { type, amount, agentLimits } = req.body;
+  if (type && !["daily", "monthly"].includes(type)) {
+    res.status(400).json({ error: "type must be 'daily' or 'monthly'" });
+    return;
+  }
+  const config = {
+    type: type || null,
+    amount: typeof amount === "number" ? amount : null,
+    agentLimits: agentLimits || {},
+  };
+  upsertSetting.run("cost-limits", JSON.stringify(config), new Date().toISOString());
+  res.json({ ok: true, ...config });
+});
+
+// ---------- Spend ----------
+
+router.get("/spend", async (req: Request, res: Response) => {
+  try {
+    const profile = req.query.profile as string | undefined;
+    const sessions = await listSessions(profile);
+    const now = new Date();
+
+    // Today's spend (UTC day)
+    const todayStr = now.toISOString().slice(0, 10);
+    const todaySessions = sessions.filter((s) => s.startedAt.slice(0, 10) === todayStr);
+    const todaySpend = todaySessions.reduce((sum, s) => sum + s.costUsd, 0);
+
+    // MTD spend (current month)
+    const monthStr = now.toISOString().slice(0, 7); // "2026-03"
+    const mtdSessions = sessions.filter((s) => s.startedAt.slice(0, 7) === monthStr);
+    const mtdSpend = mtdSessions.reduce((sum, s) => sum + s.costUsd, 0);
+
+    // Per-agent breakdown for today and MTD
+    const byAgent: Record<string, { today: number; mtd: number }> = {};
+    for (const s of sessions) {
+      if (!byAgent[s.agentId]) byAgent[s.agentId] = { today: 0, mtd: 0 };
+      if (s.startedAt.slice(0, 10) === todayStr) byAgent[s.agentId].today += s.costUsd;
+      if (s.startedAt.slice(0, 7) === monthStr) byAgent[s.agentId].mtd += s.costUsd;
+    }
+
+    // Get cost limits
+    const limitsRow = getSetting.get("cost-limits") as { value: string } | undefined;
+    const limits = limitsRow ? JSON.parse(limitsRow.value) : { type: null, amount: null, agentLimits: {} };
+
+    // Calculate usage percentage
+    let usagePercent: number | null = null;
+    if (limits.type && limits.amount) {
+      const currentSpend = limits.type === "daily" ? todaySpend : mtdSpend;
+      usagePercent = (currentSpend / limits.amount) * 100;
+    }
+
+    res.json({
+      today: +todaySpend.toFixed(2),
+      mtd: +mtdSpend.toFixed(2),
+      byAgent,
+      limits,
+      usagePercent: usagePercent !== null ? +usagePercent.toFixed(1) : null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to get spend data" });
+  }
+});
+
 export default router;

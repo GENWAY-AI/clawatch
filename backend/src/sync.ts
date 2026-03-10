@@ -59,10 +59,11 @@ function extractKeywords(title: string): string[] {
   return [...new Set(words)];
 }
 
-// --- Hardcoded pattern overrides (first pass, highest priority) ---
-// These match against session title + agentId for broader coverage
-const PROJECT_PATTERNS: Array<[RegExp, string]> = [
-  [/cla\s*watch|clawatch|datadog.*agent|observability.*agent|agent.*observability|alert.*filter|alert.*pagina|acknowledge.*all|severity.*filter|dashboard.*alert/i, "ClaWatch"],
+// --- Hardcoded pattern overrides ---
+// TITLE_PATTERNS: broader, used for title matching (short text, less noise)
+// CONTENT_PATTERNS: stricter, used for content sampling (avoids false positives from thinking/tool text)
+const TITLE_PATTERNS: Array<[RegExp, string]> = [
+  [/cla\s*watch|clawatch|datadog.*agent|observability.*agent|alert.*filter|alert.*pagina|acknowledge.?all.*alert|severity.*filter|dashboard.*alert/i, "ClaWatch"],
   [/clawmetry/i, "Clawmetry"],
   [/racing.?game|race.*game|game.*race|crossing.*finish/i, "Racing Game"],
   [/weather.*country|weather.*mvp|weather.*app/i, "Weather App"],
@@ -72,6 +73,18 @@ const PROJECT_PATTERNS: Array<[RegExp, string]> = [
   [/genygen|genway/i, "Genygen"],
   [/datadog.*openclaw|observability.*platform/i, "ClaWatch"],
   [/flight.*track|טיסה|טיסות/i, "Flight Tracker"],
+];
+
+// Content patterns: only exact product/feature names, no loose keyword combos
+const CONTENT_PATTERNS: Array<[RegExp, string]> = [
+  [/clawatch|cla\s*watch/i, "ClaWatch"],
+  [/clawmetry/i, "Clawmetry"],
+  [/racing.?game/i, "Racing Game"],
+  [/weather.*country|weather.*mvp/i, "Weather App"],
+  [/linkedin.*graph|orggraph/i, "LinkedIn Graph"],
+  [/lovable.*ai/i, "Lovable for AI"],
+  [/genygen/i, "Genygen"],
+  [/flight.?tracker/i, "Flight Tracker"],
 ];
 
 // --- Union-Find for clustering ---
@@ -154,10 +167,10 @@ function autoDetectProjects(sessions: SessionSummary[]): Map<string, { name: str
   for (const session of sessions) {
     const title = session.title || "";
 
-    // Try title match first (fast path)
+    // Try title match first (fast path, broader patterns OK for short text)
     let matched = false;
     if (title !== "Untitled session" && title.length >= 5) {
-      for (const [pattern, projectName] of PROJECT_PATTERNS) {
+      for (const [pattern, projectName] of TITLE_PATTERNS) {
         if (pattern.test(title)) {
           const projectId = `auto_${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
           if (!patternProjects.has(projectId)) {
@@ -171,10 +184,10 @@ function autoDetectProjects(sessions: SessionSummary[]): Map<string, { name: str
       }
     }
 
-    // If title didn't match, check content (catches "Untitled session" etc.)
-    // Requires multiple hits to avoid false positives from tool calls / infra noise
+    // If title didn't match, check content with stricter patterns
+    // Requires 3+ hits to avoid false positives from tool calls / infra noise
     if (!matched) {
-      for (const [pattern, projectName] of PROJECT_PATTERNS) {
+      for (const [pattern, projectName] of CONTENT_PATTERNS) {
         const hits = countPatternInContent(session.id, session.agentId, pattern);
         if (hits >= CONTENT_MATCH_THRESHOLD) {
           const projectId = `auto_${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;

@@ -340,45 +340,74 @@ function humanizeError(error: string, agentName: string): string {
   // Preprocess: strip log timestamps/tags to get the actual error content
   const cleanedError = stripLogPrefix(error);
   const patterns: [RegExp, string][] = [
-    [/ECONNREFUSED.*:(\d+)/i, `${agentName} can't connect (connection refused)`],
+    // Network errors
     [/ECONNREFUSED/i, `${agentName} can't connect to a service`],
-    [/ECONNRESET/i, `${agentName} lost connection (reset by remote)`],
+    [/ECONNRESET/i, `${agentName} lost connection unexpectedly`],
     [/ETIMEDOUT/i, `${agentName} connection timed out`],
-    [/ENOTFOUND/i, `${agentName} can't resolve hostname (DNS failure)`],
+    [/ENOTFOUND/i, `${agentName} can't reach a remote server`],
+    [/EADDRINUSE/i, `${agentName} port already in use`],
+    [/EPERM|EACCES/i, `${agentName} permission denied`],
+    [/ENOMEM|out of memory/i, `${agentName} ran out of memory`],
+    // HTTP errors
     [/rate.?limit/i, `${agentName} hit API rate limit`],
     [/401|unauthorized/i, `${agentName} authentication failed`],
     [/403|forbidden/i, `${agentName} access denied`],
-    [/404|not found/i, `${agentName} requested a missing resource`],
     [/500|internal server error/i, `Remote server error for ${agentName}`],
-    [/502|bad gateway/i, `Bad gateway for ${agentName}`],
+    [/502|bad gateway/i, `Bad gateway error for ${agentName}`],
     [/503|service unavailable/i, `Service unavailable for ${agentName}`],
-    [/timeout/i, `${agentName} operation timed out`],
+    [/504|gateway timeout/i, `Gateway timeout for ${agentName}`],
+    // Code errors
+    [/Cannot read propert/i, `${agentName} hit a code bug (null reference)`],
+    [/is not a function/i, `${agentName} hit a code bug (type error)`],
+    [/JSON\.parse|Unexpected token/i, `${agentName} received malformed data`],
     [/SQLITE_BUSY/i, `${agentName} database is locked`],
-    [/Cannot read propert/i, `${agentName} hit a null reference bug`],
-    [/is not a function/i, `${agentName} hit a type error`],
-    [/JSON\.parse|Unexpected token/i, `${agentName} received invalid data`],
+    [/SQLITE_CORRUPT/i, `${agentName} database corruption detected`],
+    // Auth/cert
     [/token.*expir/i, `${agentName} auth token expired`],
     [/CERT_|certificate/i, `${agentName} SSL certificate error`],
-    [/ENOMEM|out of memory/i, `${agentName} ran out of memory`],
+    // OpenClaw / gateway specific
+    [/[Ss]lack\s*bot\s*token\s*missing/i, `${agentName} Slack credentials not configured`],
+    [/[Rr]etry failed for delivery/i, `${agentName} message delivery failing`],
+    [/delivery.*failed|failed.*delivery/i, `${agentName} message delivery failing`],
+    [/socket.?mode failed/i, `${agentName} Slack connection failing`],
+    [/pong wasn't received|pong.*timeout/i, `${agentName} Slack connection timing out`],
+    [/[Uu]nhandled promise rejection/i, `${agentName} crashed (unhandled error)`],
+    [/allowlist contains unknown/i, `${agentName} has misconfigured tool settings`],
+    [/[Ss]kipping skill path/i, `${agentName} has a skill path issue`],
+    [/hostname conflict/i, `${agentName} network hostname conflict`],
+    // Generic patterns (broad — keep last)
+    [/timeout/i, `${agentName} operation timed out`],
+    [/connection refused/i, `${agentName} can't connect to a service`],
+    [/connection reset/i, `${agentName} lost connection`],
+    [/missing.*config|config.*missing/i, `${agentName} missing configuration`],
+    [/crash|fatal|panic/i, `${agentName} crashed`],
   ];
 
   for (const [pattern, summary] of patterns) {
     if (pattern.test(cleanedError)) return summary;
   }
 
-  // Fallback: extract error type + short message from cleaned error
+  // Fallback: try to extract the core meaning
+  // "ErrorType: message" format
   const typeMatch = cleanedError.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
   if (typeMatch) {
     const shortMsg = typeMatch[2].trim();
-    return shortMsg.length > 60 ? `${agentName}: ${shortMsg.slice(0, 57)}...` : `${agentName}: ${shortMsg}`;
+    return shortMsg.length > 50 ? `${agentName}: ${shortMsg.slice(0, 47)}...` : `${agentName}: ${shortMsg}`;
   }
 
-  // Use cleaned error (without timestamps/tags) for display
+  // Look for a verb phrase that explains what happened
+  const actionMatch = cleanedError.match(/(failed to \w+|cannot \w+|unable to \w+|could not \w+|error \w+ing)/i);
+  if (actionMatch) {
+    return `${agentName} ${actionMatch[1].toLowerCase()}`;
+  }
+
+  // Last resort: first clause only (before comma/semicolon/parenthesis), keep short
   const clean = cleanedError.replace(/\n.*/s, "").trim();
-  if (!clean || clean.length < 3) {
+  if (!clean || clean.length < 5) {
     return `${agentName} encountered errors`;
   }
-  return clean.length > 60 ? `${agentName}: ${clean.slice(0, 57)}...` : `${agentName}: ${clean}`;
+  const clause = clean.split(/[,;(]/)[0].trim();
+  return clause.length > 50 ? `${agentName}: ${clause.slice(0, 47)}...` : `${agentName}: ${clause}`;
 }
 
 function cleanErrorForDisplay(error: string): string {

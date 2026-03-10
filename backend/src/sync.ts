@@ -63,7 +63,7 @@ function extractKeywords(title: string): string[] {
 // TITLE_PATTERNS: broader, used for title matching (short text, less noise)
 // CONTENT_PATTERNS: stricter, used for content sampling (avoids false positives from thinking/tool text)
 const TITLE_PATTERNS: Array<[RegExp, string]> = [
-  [/cla\s*watch|clawatch|datadog.*agent|observability.*agent|alert.*filter|alert.*pagina|acknowledge.?all.*alert|severity.*filter|dashboard.*alert/i, "ClaWatch"],
+  [/cla\s*watch|clawatch|clawwatch|datadog.*agent|observability.*agent|alert.*filter|alert.*pagina|acknowledge.?all.*alert|severity.*filter|dashboard.*alert/i, "ClaWatch"],
   [/clawmetry/i, "Clawmetry"],
   [/racing.?game|race.*game|game.*race|crossing.*finish/i, "Racing Game"],
   [/weather.*country|weather.*mvp|weather.*app/i, "Weather App"],
@@ -77,7 +77,7 @@ const TITLE_PATTERNS: Array<[RegExp, string]> = [
 
 // Content patterns: only exact product/feature names, no loose keyword combos
 const CONTENT_PATTERNS: Array<[RegExp, string]> = [
-  [/clawatch|cla\s*watch/i, "ClaWatch"],
+  [/clawatch|clawwatch|cla\s*watch/i, "ClaWatch"],
   [/clawmetry/i, "Clawmetry"],
   [/racing.?game/i, "Racing Game"],
   [/weather.*country|weather.*mvp/i, "Weather App"],

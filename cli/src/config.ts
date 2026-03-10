@@ -3,10 +3,12 @@ import * as path from 'path';
 import * as os from 'os';
 
 export interface ClaWatchConfig {
-  openclawDir: string;
+  openclawDirs: string[];
   backendUrl: string;
   apiKey: string;
   scanIntervalMs: number;
+  /** @deprecated Use openclawDirs instead. Kept for backward compat when loading old configs. */
+  openclawDir?: string;
 }
 
 const CLAWATCH_DIR = path.join(os.homedir(), '.clawatch');
@@ -50,8 +52,35 @@ export function clearPids(): void {
   if (fs.existsSync(PID_PATH)) fs.unlinkSync(PID_PATH);
 }
 
+/**
+ * Auto-discover all ~/.openclaw and ~/.openclaw-* directories that have an agents/ subdirectory.
+ */
+export function discoverOpenclawDirs(): string[] {
+  const home = os.homedir();
+  const dirs: string[] = [];
+  try {
+    const entries = fs.readdirSync(home, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name === '.openclaw' || entry.name.startsWith('.openclaw-')) {
+        const dir = path.join(home, entry.name);
+        if (fs.existsSync(path.join(dir, 'agents'))) {
+          dirs.push(dir);
+        }
+      }
+    }
+  } catch {
+    // Fallback
+  }
+  if (dirs.length === 0) {
+    // Always include the default dir even if it doesn't exist yet
+    dirs.push(path.join(home, '.openclaw'));
+  }
+  return dirs.sort();
+}
+
 const DEFAULT_CONFIG: ClaWatchConfig = {
-  openclawDir: path.join(os.homedir(), '.openclaw'),
+  openclawDirs: discoverOpenclawDirs(),
   backendUrl: 'http://localhost:3001',
   apiKey: '',
   scanIntervalMs: 60000,
@@ -65,15 +94,29 @@ export function ensureDir(): void {
 
 export function loadConfig(): ClaWatchConfig {
   if (!fs.existsSync(CONFIG_PATH)) {
-    return DEFAULT_CONFIG;
+    return { ...DEFAULT_CONFIG, openclawDirs: discoverOpenclawDirs() };
   }
-  const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
-  return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+  const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+
+  // Backward compat: convert old openclawDir (string) to openclawDirs (array)
+  if (raw.openclawDir && !raw.openclawDirs) {
+    raw.openclawDirs = [raw.openclawDir];
+    delete raw.openclawDir;
+  }
+
+  const config: ClaWatchConfig = { ...DEFAULT_CONFIG, ...raw };
+
+  // Always re-discover to pick up new profiles
+  config.openclawDirs = discoverOpenclawDirs();
+
+  return config;
 }
 
 export function saveConfig(config: ClaWatchConfig): void {
   ensureDir();
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
+  // Don't persist the deprecated field
+  const { openclawDir, ...rest } = config;
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(rest, null, 2) + '\n');
 }
 
 export function configExists(): boolean {

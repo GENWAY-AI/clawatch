@@ -1,7 +1,9 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuid } from "uuid";
+import * as fs from "fs";
+import * as path from "path";
 import db from "./db";
-import { listSessions, getSessionDetail, SessionSummary } from "./sessions";
+import { listSessions, getSessionDetail, discoverProfiles, SessionSummary } from "./sessions";
 import {
   createProject,
   listProjects,
@@ -9,20 +11,65 @@ import {
   addSessionToProject,
   removeSessionFromProject,
   suggestRelatedSessions,
+  setSessionProjects,
+  getSessionProjects,
+  bulkGetSessionProjects,
 } from "./projects";
 
 const router = Router();
 
+// ---------- Profiles ----------
+
+router.get("/profiles", (_req: Request, res: Response) => {
+  const profiles = discoverProfiles();
+  res.json({ profiles });
+});
+
+// ---------- Version ----------
+
+router.get("/version", (_req: Request, res: Response) => {
+  const candidates = [
+    path.join(__dirname, "..", "..", "cli", "package.json"),  // dev/source
+    path.join(__dirname, "..", "package.json"),               // bundled in CLI
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        const pkg = JSON.parse(fs.readFileSync(candidate, "utf-8"));
+        if (pkg.version) {
+          res.json({ version: pkg.version });
+          return;
+        }
+      }
+    } catch {
+      // try next
+    }
+  }
+  res.json({ version: "unknown" });
+});
+
 // ---------- Agents ----------
 
-router.get("/agents", (_req: Request, res: Response) => {
+router.get("/agents", async (_req: Request, res: Response) => {
   const statusFilter = (_req.query.status as string) || "active";
+  const profileFilter = _req.query.profile as string | undefined;
   const agents = db.prepare("SELECT * FROM agents ORDER BY costUsd DESC").all() as any[];
 
   // Filter by status
-  const filtered = statusFilter === "all"
+  let filtered = statusFilter === "all"
     ? agents
     : agents.filter((a: any) => a.status === statusFilter);
+
+  // Filter by profile: only return agents that have sessions in the selected profile
+  if (profileFilter) {
+    try {
+      const sessions = await listSessions(profileFilter);
+      const agentIdsInProfile = new Set(sessions.map((s) => s.agentId));
+      filtered = filtered.filter((a: any) => agentIdsInProfile.has(a.id));
+    } catch {
+      // If profile lookup fails, return unfiltered
+    }
+  }
 
   res.json({ agents: filtered });
 });
@@ -127,10 +174,10 @@ router.post("/events", (req: Request, res: Response) => {
 
 router.get("/costs", async (req: Request, res: Response) => {
   try {
-    const { agentId, from, to } = req.query;
+    const { agentId, from, to, profile } = req.query;
 
     // Get sessions (cached, authoritative source from JSONL files)
-    let sessions = await listSessions();
+    let sessions = await listSessions(profile as string | undefined);
 
     // Apply filters
     if (agentId) {
@@ -187,15 +234,30 @@ router.get("/costs", async (req: Request, res: Response) => {
 
 // ---------- Alerts ----------
 
-router.get("/alerts", (req: Request, res: Response) => {
+router.get("/alerts", async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 5, 1), 100);
   const offset = Math.max(parseInt(req.query.offset as string, 10) || 0, 0);
   const severityParam = req.query.severity as string | undefined;
   const acknowledgedParam = req.query.acknowledged as string | undefined;
   const agentIdParam = req.query.agentId as string | undefined;
+  const profileParam = req.query.profile as string | undefined;
 
   const conditions: string[] = [];
   const params: any[] = [];
+
+  // Profile filter: restrict to agents that belong to this profile
+  if (profileParam) {
+    const sessions = await listSessions(profileParam);
+    const agentIds = [...new Set(sessions.map((s) => s.agentId))];
+    if (agentIds.length > 0) {
+      conditions.push(`agentId IN (${agentIds.map(() => "?").join(", ")})`);
+      params.push(...agentIds);
+    } else {
+      // No agents in this profile — return empty
+      res.json({ alerts: [], total: 0 });
+      return;
+    }
+  }
 
   if (severityParam) {
     const severities = severityParam.split(",").map((s) => s.trim());
@@ -228,12 +290,26 @@ router.get("/alerts", (req: Request, res: Response) => {
   res.json({ alerts, total });
 });
 
-router.post("/alerts/acknowledge-all", (req: Request, res: Response) => {
+router.post("/alerts/acknowledge-all", async (req: Request, res: Response) => {
   const severityParam = req.query.severity as string | undefined;
   const agentIdParam = req.query.agentId as string | undefined;
+  const profileParam = req.query.profile as string | undefined;
 
   const conditions: string[] = ["acknowledged = 0"];
   const params: any[] = [];
+
+  // Profile filter
+  if (profileParam) {
+    const sessions = await listSessions(profileParam);
+    const agentIds = [...new Set(sessions.map((s) => s.agentId))];
+    if (agentIds.length > 0) {
+      conditions.push(`agentId IN (${agentIds.map(() => "?").join(", ")})`);
+      params.push(...agentIds);
+    } else {
+      res.json({ ok: true, count: 0 });
+      return;
+    }
+  }
 
   if (severityParam) {
     const severities = severityParam.split(",").map((s) => s.trim());
@@ -572,10 +648,11 @@ router.get("/alerts/:id/details", (req: Request, res: Response) => {
 
 router.get("/sessions", async (req: Request, res: Response) => {
   try {
-    let sessions = await listSessions();
+    const profileFilter = req.query.profile as string | undefined;
+    let sessions = await listSessions(profileFilter);
 
     // Filter by agentId
-    const { agentId, status, sort, limit } = req.query;
+    const { agentId, status, sort, limit, offset } = req.query;
     if (agentId) {
       sessions = sessions.filter((s) => s.agentId === agentId);
     }
@@ -595,12 +672,23 @@ router.get("/sessions", async (req: Request, res: Response) => {
     }
     // default: already sorted by lastActivityAt DESC
 
-    // Limit
-    const limitStr = Array.isArray(limit) ? limit[0] : limit;
-    const max = Math.min(parseInt(limitStr as string, 10) || 50, 500);
-    sessions = sessions.slice(0, max);
+    // Total count (after filtering, before pagination)
+    const total = sessions.length;
 
-    res.json({ sessions });
+    // Pagination
+    const limitVal = Math.min(Math.max(parseInt(limit as string, 10) || 20, 1), 500);
+    const offsetVal = Math.max(parseInt(offset as string, 10) || 0, 0);
+    sessions = sessions.slice(offsetVal, offsetVal + limitVal);
+
+    // Attach project tags to each session
+    const sessionIds = sessions.map((s) => s.id);
+    const projectTags = bulkGetSessionProjects(sessionIds);
+    const sessionsWithProjects = sessions.map((s) => ({
+      ...s,
+      projects: projectTags.get(s.id) || [],
+    }));
+
+    res.json({ sessions: sessionsWithProjects, total });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to list sessions" });
   }
@@ -608,7 +696,8 @@ router.get("/sessions", async (req: Request, res: Response) => {
 
 router.get("/sessions/:id", async (req: Request, res: Response) => {
   try {
-    const detail = await getSessionDetail(req.params.id as string);
+    const profileFilter = req.query.profile as string | undefined;
+    const detail = await getSessionDetail(req.params.id as string, profileFilter);
     if (!detail) {
       res.status(404).json({ error: "Session not found" });
       return;
@@ -630,6 +719,32 @@ router.get("/sessions/:id/suggestions", async (req: Request, res: Response) => {
   }
 });
 
+// ---------- Session Project Tags ----------
+
+router.put("/sessions/:id/projects", (req: Request, res: Response) => {
+  const { projectIds } = req.body;
+  if (!Array.isArray(projectIds)) {
+    res.status(400).json({ error: "projectIds must be an array" });
+    return;
+  }
+  setSessionProjects(req.params.id as string, projectIds);
+  res.json({ ok: true });
+});
+
+router.delete("/sessions/:id/projects/:projectId", (req: Request, res: Response) => {
+  const ok = removeSessionFromProject(req.params.projectId as string, req.params.id as string);
+  if (!ok) {
+    res.status(404).json({ error: "Project tag not found on session" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+router.get("/sessions/:id/projects", (req: Request, res: Response) => {
+  const projects = getSessionProjects(req.params.id as string);
+  res.json({ projects });
+});
+
 // ---------- Projects ----------
 
 router.post("/projects", (req: Request, res: Response) => {
@@ -642,8 +757,22 @@ router.post("/projects", (req: Request, res: Response) => {
   res.status(201).json(project);
 });
 
-router.get("/projects", (_req: Request, res: Response) => {
-  const projects = listProjects();
+router.get("/projects", async (_req: Request, res: Response) => {
+  const profileParam = _req.query.profile as string | undefined;
+  let projects = listProjects();
+
+  // Filter projects to only include those with sessions in the selected profile
+  if (profileParam) {
+    const sessions = await listSessions(profileParam);
+    const profileSessionIds = new Set(sessions.map((s) => s.id));
+    projects = projects.filter((p: any) => {
+      const projectSessionIds = db.prepare(
+        "SELECT sessionId FROM project_sessions WHERE projectId = ?"
+      ).all(p.id) as { sessionId: string }[];
+      return projectSessionIds.some((ps) => profileSessionIds.has(ps.sessionId));
+    });
+  }
+
   res.json({ projects });
 });
 

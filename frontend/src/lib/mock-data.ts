@@ -162,6 +162,7 @@ export const mockSessions: Session[] = [
     startedAt: minutesAgo(45),
     lastActivityAt: minutesAgo(1),
     duration: 2640,
+    projects: [{ id: "project-1", name: "Building ClaWatch" }],
   },
   {
     id: "session-2",
@@ -175,6 +176,7 @@ export const mockSessions: Session[] = [
     startedAt: hoursAgo(3),
     lastActivityAt: hoursAgo(2),
     duration: 3600,
+    projects: [{ id: "project-2", name: "Bug Fixes Sprint" }],
   },
   {
     id: "session-3",
@@ -201,6 +203,7 @@ export const mockSessions: Session[] = [
     startedAt: hoursAgo(1.5),
     lastActivityAt: minutesAgo(0.5),
     duration: 5400,
+    projects: [{ id: "project-1", name: "Building ClaWatch" }, { id: "project-2", name: "Bug Fixes Sprint" }],
   },
   {
     id: "session-5",

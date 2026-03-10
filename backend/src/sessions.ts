@@ -2,11 +2,55 @@ import fs from "fs";
 import path from "path";
 import readline from "readline";
 
+// ---------- Profiles ----------
+
+export interface Profile {
+  id: string;        // "default" or the suffix (e.g. "travel-agent")
+  name: string;      // display name: "Default" or "Travel Agent" (title-cased suffix)
+  dir: string;       // absolute path
+}
+
+export function discoverProfiles(): Profile[] {
+  const home = process.env.HOME || require("os").homedir();
+  const entries = fs.readdirSync(home, { withFileTypes: true });
+  const profiles: Profile[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === ".openclaw") {
+      const dir = path.join(home, entry.name);
+      if (fs.existsSync(path.join(dir, "agents"))) {
+        profiles.push({ id: "default", name: "Default", dir });
+      }
+    } else if (entry.name.startsWith(".openclaw-")) {
+      const dir = path.join(home, entry.name);
+      if (fs.existsSync(path.join(dir, "agents"))) {
+        const suffix = entry.name.slice(".openclaw-".length); // e.g. "travel-agent"
+        const displayName = suffix
+          .split("-")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+        profiles.push({ id: suffix, name: displayName, dir });
+      }
+    }
+  }
+
+  // Sort: default first, then alphabetical
+  profiles.sort((a, b) => {
+    if (a.id === "default") return -1;
+    if (b.id === "default") return 1;
+    return a.id.localeCompare(b.id);
+  });
+
+  return profiles;
+}
+
 // ---------- Types ----------
 
 export interface SessionSummary {
   id: string;
   agentId: string;
+  profile: string;
   title: string;
   status: "active" | "idle" | "completed";
   costUsd: number;
@@ -38,13 +82,11 @@ export interface SessionDetail extends SessionSummary {
 
 // ---------- Cache ----------
 
-let cachedSessions: SessionSummary[] | null = null;
-let cacheTimestamp = 0;
+const sessionCache = new Map<string, { sessions: SessionSummary[]; timestamp: number }>();
 const CACHE_TTL_MS = 30_000;
 
 export function invalidateCache() {
-  cachedSessions = null;
-  cacheTimestamp = 0;
+  sessionCache.clear();
 }
 
 // ---------- Helpers ----------
@@ -147,9 +189,12 @@ function extractBestTitle(userMessages: string[]): string {
 async function parseSessionFile(
   filePath: string,
   agentId: string,
-  collectMessages: boolean
+  collectMessages: boolean,
+  profileId: string = "default"
 ): Promise<{ summary: SessionSummary; detail?: Omit<SessionDetail, keyof SessionSummary> } | null> {
-  const sessionId = path.basename(filePath, ".jsonl");
+  // Handle both .jsonl and .jsonl.reset.TIMESTAMP files
+  const basename = path.basename(filePath);
+  const sessionId = basename.replace(/\.jsonl(\.reset\.\S+)?$/, "");
 
   let firstTimestamp = "";
   let lastTimestamp = "";
@@ -269,6 +314,7 @@ async function parseSessionFile(
   const summary: SessionSummary = {
     id: sessionId,
     agentId,
+    profile: profileId,
     title: extractBestTitle(userMessageTexts),
     status: deriveStatus(lastTimestamp),
     costUsd,
@@ -294,15 +340,8 @@ async function parseSessionFile(
 
 // ---------- Public API ----------
 
-export async function listSessions(openclawDir?: string): Promise<SessionSummary[]> {
-  const now = Date.now();
-  if (cachedSessions && now - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedSessions;
-  }
-
-  const dir = openclawDir || resolveOpenclawDir();
+async function listSessionsForDir(dir: string, profileId: string): Promise<SessionSummary[]> {
   const agentsDir = path.join(dir, "agents");
-
   if (!fs.existsSync(agentsDir)) return [];
 
   const agentNames = fs.readdirSync(agentsDir).filter((name) => {
@@ -314,10 +353,10 @@ export async function listSessions(openclawDir?: string): Promise<SessionSummary
 
   for (const agentName of agentNames) {
     const sessionsDir = path.join(agentsDir, agentName, "sessions");
-    const files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith(".jsonl"));
+    const files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith(".jsonl") || f.includes(".jsonl.reset."));
 
     const results = await Promise.all(
-      files.map((f) => parseSessionFile(path.join(sessionsDir, f), agentName, false))
+      files.map((f) => parseSessionFile(path.join(sessionsDir, f), agentName, false, profileId))
     );
 
     for (const result of results) {
@@ -325,31 +364,92 @@ export async function listSessions(openclawDir?: string): Promise<SessionSummary
     }
   }
 
+  return allSessions;
+}
+
+export async function listSessions(profile?: string): Promise<SessionSummary[]> {
+  const cacheKey = profile || "__all__";
+  const now = Date.now();
+  const cached = sessionCache.get(cacheKey);
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return cached.sessions;
+  }
+
+  let allSessions: SessionSummary[] = [];
+
+  if (profile) {
+    // Scan only the specified profile
+    const profiles = discoverProfiles();
+    const p = profiles.find((pr) => pr.id === profile);
+    if (p) {
+      allSessions = await listSessionsForDir(p.dir, p.id);
+    } else {
+      // Fallback: try resolveOpenclawDir for backward compat
+      const dir = resolveOpenclawDir();
+      allSessions = await listSessionsForDir(dir, "default");
+    }
+  } else {
+    // Scan ALL profiles
+    const profiles = discoverProfiles();
+    if (profiles.length === 0) {
+      // Fallback: single default dir
+      const dir = resolveOpenclawDir();
+      allSessions = await listSessionsForDir(dir, "default");
+    } else {
+      for (const p of profiles) {
+        const sessions = await listSessionsForDir(p.dir, p.id);
+        allSessions.push(...sessions);
+      }
+    }
+  }
+
   // Sort by lastActivityAt DESC
   allSessions.sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime());
 
-  cachedSessions = allSessions;
-  cacheTimestamp = now;
+  sessionCache.set(cacheKey, { sessions: allSessions, timestamp: now });
 
   return allSessions;
 }
 
-export async function getSessionDetail(sessionId: string, openclawDir?: string): Promise<SessionDetail | null> {
-  const dir = openclawDir || resolveOpenclawDir();
-  const agentsDir = path.join(dir, "agents");
+export async function getSessionDetail(sessionId: string, profile?: string): Promise<SessionDetail | null> {
+  const profiles = profile
+    ? discoverProfiles().filter((p) => p.id === profile)
+    : discoverProfiles();
 
-  if (!fs.existsSync(agentsDir)) return null;
+  // Fallback if no profiles discovered
+  const dirs = profiles.length > 0
+    ? profiles
+    : [{ id: "default", name: "Default", dir: resolveOpenclawDir() }];
 
-  const agentNames = fs.readdirSync(agentsDir);
+  for (const p of dirs) {
+    const agentsDir = path.join(p.dir, "agents");
+    if (!fs.existsSync(agentsDir)) continue;
 
-  for (const agentName of agentNames) {
-    const filePath = path.join(agentsDir, agentName, "sessions", `${sessionId}.jsonl`);
-    if (!fs.existsSync(filePath)) continue;
+    const agentNames = fs.readdirSync(agentsDir);
 
-    const result = await parseSessionFile(filePath, agentName, true);
-    if (!result || !result.detail) return null;
+    for (const agentName of agentNames) {
+      const sessionsDir = path.join(agentsDir, agentName, "sessions");
+      if (!fs.existsSync(sessionsDir)) continue;
 
-    return { ...result.summary, ...result.detail };
+      // Check both .jsonl and .jsonl.reset.* files
+      let filePath = path.join(sessionsDir, `${sessionId}.jsonl`);
+      if (!fs.existsSync(filePath)) {
+        // Look for reset file
+        const resetFile = fs.readdirSync(sessionsDir).find(
+          (f) => f.startsWith(`${sessionId}.jsonl.reset.`)
+        );
+        if (resetFile) {
+          filePath = path.join(sessionsDir, resetFile);
+        } else {
+          continue;
+        }
+      }
+
+      const result = await parseSessionFile(filePath, agentName, true, p.id);
+      if (!result || !result.detail) return null;
+
+      return { ...result.summary, ...result.detail };
+    }
   }
 
   return null;

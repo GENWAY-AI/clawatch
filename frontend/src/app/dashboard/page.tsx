@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project } from "@/lib/types";
-import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject } from "@/lib/api";
+import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile } from "@/lib/types";
+import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 
 function formatRelativeTime(iso: string): string {
@@ -19,6 +19,25 @@ function formatRelativeTime(iso: string): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+function formatDuration(ms: number): string {
+  const totalMinutes = Math.floor(ms / 60000);
+  const totalHours = Math.floor(totalMinutes / 60);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function formatTimeline(first: string, last: string): string {
+  const f = new Date(first);
+  const l = new Date(last);
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (f.toDateString() === l.toDateString()) return fmt(f);
+  return `${fmt(f)} – ${fmt(l)}`;
 }
 
 function formatTokens(n: number): string {
@@ -61,6 +80,92 @@ type SessionSort = "recent" | "cost" | "tokens";
 type AlertFilter = "all" | "critical" | "warning" | "info";
 
 const ALERTS_PER_PAGE = 5;
+const SESSIONS_PER_PAGE = 10;
+
+function ProjectTagChips({
+  session,
+  allProjects,
+  onAdd,
+  onRemove,
+}: {
+  session: Session;
+  allProjects: Project[];
+  onAdd: (projectId: string) => void;
+  onRemove: (projectId: string) => void;
+}) {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const sessionProjects = session.projects ?? [];
+  const taggedIds = new Set(sessionProjects.map((p) => p.id));
+  const available = allProjects.filter((p) => !taggedIds.has(p.id));
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showDropdown]);
+
+  if (sessionProjects.length === 0 && available.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-1.5 group/tags">
+      {sessionProjects.map((proj) => (
+        <span
+          key={proj.id}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"
+        >
+          {proj.name}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(proj.id);
+            }}
+            className="hover:text-amber-200 transition-colors ml-0.5 leading-none"
+          >
+            &times;
+          </button>
+        </span>
+      ))}
+      {available.length > 0 && (
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowDropdown(!showDropdown);
+            }}
+            className="inline-flex items-center justify-center size-5 rounded-full border border-dashed border-zinc-600 text-zinc-500 hover:border-amber-500/40 hover:text-amber-400 transition-colors text-[11px] opacity-0 group-hover/tags:opacity-100 focus:opacity-100"
+            title="Add project tag"
+          >
+            +
+          </button>
+          {showDropdown && (
+            <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border/50 bg-zinc-900 shadow-lg py-1">
+              {available.map((proj) => (
+                <button
+                  key={proj.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdd(proj.id);
+                    setShowDropdown(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-amber-500/10 hover:text-amber-400 transition-colors"
+                >
+                  {proj.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // --- Human-readable alert helpers ---
 
@@ -158,55 +263,157 @@ export default function DashboardPage() {
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<Tab>("agents");
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const [tab, setTabRaw] = useState<Tab>(tabParam && ["agents", "sessions", "projects"].includes(tabParam) ? tabParam : "agents");
+
+  function setTab(t: Tab) {
+    setTabRaw(t);
+    const params = new URLSearchParams(searchParams.toString());
+    if (t === "agents") {
+      params.delete("tab");
+    } else {
+      params.set("tab", t);
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [totalAgentCount, setTotalAgentCount] = useState(0);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsTotal, setAlertsTotal] = useState(0);
   const [allAlerts, setAllAlerts] = useState<Alert[]>([]);
   const [costs, setCosts] = useState<CostData | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsTotal, setSessionsTotal] = useState(0);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [sessionFilter, setSessionFilter] = useState<SessionFilter>("active");
-  const [sessionSort, setSessionSort] = useState<SessionSort>("recent");
+  const sessionFilterParam = searchParams.get("sessionFilter") as SessionFilter | null;
+  const sessionSortParam = searchParams.get("sessionSort") as SessionSort | null;
+  const [sessionFilter, setSessionFilterRaw] = useState<SessionFilter>(
+    sessionFilterParam && ["all", "active", "idle", "completed"].includes(sessionFilterParam) ? sessionFilterParam : "active"
+  );
+  const [sessionSort, setSessionSortRaw] = useState<SessionSort>(
+    sessionSortParam && ["recent", "cost", "tokens"].includes(sessionSortParam) ? sessionSortParam : "recent"
+  );
   const [showIdleAgents, setShowIdleAgents] = useState(false);
-  const [alertFilter, setAlertFilter] = useState<AlertFilter>("all");
-  const [alertPage, setAlertPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDesc, setNewProjectDesc] = useState("");
   const [ackAllLoading, setAckAllLoading] = useState(false);
   const [expandedAlerts, setExpandedAlerts] = useState<Record<string, AlertDetails | "loading">>({});
   const expandedAlertsRef = useRef(expandedAlerts);
   expandedAlertsRef.current = expandedAlerts;
   const [prefetchedDetails, setPrefetchedDetails] = useState<Record<string, AlertDetails>>({});
   const [showStackTrace, setShowStackTrace] = useState<Record<string, boolean>>({});
-  const [loading, setLoading] = useState(true);
-  const [showNewProject, setShowNewProject] = useState(false);
-  const [newProjectName, setNewProjectName] = useState("");
-  const [newProjectDesc, setNewProjectDesc] = useState("");
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [version, setVersion] = useState<string | null>(null);
+
+  const selectedProfile = searchParams.get("profile") || "default";
+  const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
+  const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
+  const sessionPage = Math.max(1, parseInt(searchParams.get("sessionPage") || "1", 10));
+
+  function setAlertFilter(filter: AlertFilter) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (filter === "all") {
+      params.delete("alertSeverity");
+    } else {
+      params.set("alertSeverity", filter);
+    }
+    params.delete("alertPage");
+    setExpandedAlerts({});
+    setShowStackTrace({});
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setAlertPage(page: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (page <= 1) {
+      params.delete("alertPage");
+    } else {
+      params.set("alertPage", String(page));
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setSessionFilter(f: SessionFilter) {
+    setSessionFilterRaw(f);
+    const params = new URLSearchParams(searchParams.toString());
+    if (f === "active") {
+      params.delete("sessionFilter");
+    } else {
+      params.set("sessionFilter", f);
+    }
+    params.delete("sessionPage");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setSessionSort(s: SessionSort) {
+    setSessionSortRaw(s);
+    const params = new URLSearchParams(searchParams.toString());
+    if (s === "recent") {
+      params.delete("sessionSort");
+    } else {
+      params.set("sessionSort", s);
+    }
+    params.delete("sessionPage");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setSessionPage(page: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (page <= 1) {
+      params.delete("sessionPage");
+    } else {
+      params.set("sessionPage", String(page));
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setSelectedProfile(profileId: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("profile", profileId || "default");
+    params.delete("alertPage");
+    params.delete("sessionPage");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  useEffect(() => {
+    Promise.all([getProfiles(), getVersion()]).then(([p, v]) => {
+      setProfiles(p);
+      setVersion(v);
+    });
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
       const agentStatus = showIdleAgents ? "all" : undefined;
       const sessStatus = sessionFilter === "all" ? "all" : sessionFilter === "active" ? undefined : sessionFilter;
       const severityParam = alertFilter !== "all" ? (alertFilter as AlertSeverity) : undefined;
-      const offset = (alertPage - 1) * ALERTS_PER_PAGE;
-      const [a, al, allAl, c, s, p] = await Promise.all([
-        getAgents(agentStatus),
-        getAlerts({ limit: ALERTS_PER_PAGE, offset, severity: severityParam }),
-        getAlerts(),
-        getCosts(),
-        getSessions(undefined, sessStatus, sessionSort),
-        getProjects(),
+      const alertOffset = (alertPage - 1) * ALERTS_PER_PAGE;
+      const sessionOffset = (sessionPage - 1) * SESSIONS_PER_PAGE;
+      const prof = selectedProfile;
+      const [a, allAgents, al, allAl, c, sessResult, p] = await Promise.all([
+        getAgents(agentStatus, prof),
+        getAgents("all", prof),
+        getAlerts({ limit: ALERTS_PER_PAGE, offset: alertOffset, severity: severityParam, profile: prof }),
+        getAlerts({ profile: prof }),
+        getCosts(prof),
+        getSessions({ status: sessStatus, sort: sessionSort, profile: prof, limit: SESSIONS_PER_PAGE, offset: sessionOffset }),
+        getProjects(prof),
       ]);
       setAgents(a);
+      setTotalAgentCount(allAgents.length);
       setAlerts(al.alerts ?? al);
       setAlertsTotal(al.total ?? 0);
       setAllAlerts(allAl.alerts ?? allAl);
       setCosts(c);
-      setSessions(s);
+      setSessions(sessResult.sessions);
+      setSessionsTotal(sessResult.total);
       setProjects(p);
     } finally {
       setLoading(false);
     }
-  }, [showIdleAgents, sessionFilter, sessionSort, alertFilter, alertPage]);
+  }, [showIdleAgents, sessionFilter, sessionSort, alertFilter, alertPage, sessionPage, selectedProfile]);
 
   useEffect(() => {
     fetchData();
@@ -342,9 +549,26 @@ function DashboardContent() {
             </Link>
             <span className="text-sm text-muted-foreground">Dashboard</span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live
+          <div className="flex items-center gap-4">
+            {profiles.length > 0 && (
+              <select
+                value={selectedProfile}
+                onChange={(e) => setSelectedProfile(e.target.value)}
+                className="bg-zinc-900 border border-border/50 rounded-md px-2.5 py-1 text-xs text-muted-foreground focus:outline-none focus:border-emerald-500/50 cursor-pointer appearance-none pr-6"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
+              >
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
+            </div>
+            {version && (
+              <span className="text-[10px] text-muted-foreground/60">v{version}</span>
+            )}
           </div>
         </div>
       </nav>
@@ -357,7 +581,7 @@ function DashboardContent() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Agents</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{agents.length}</div>
+              <div className="text-3xl font-bold">{totalAgentCount}</div>
             </CardContent>
           </Card>
           <Card>
@@ -406,7 +630,10 @@ function DashboardContent() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Agents
+            Active Agents
+            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
+              {agents.length}
+            </Badge>
             {tab === "agents" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
             )}
@@ -421,7 +648,7 @@ function DashboardContent() {
           >
             Sessions
             <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
-              {sessions.length}
+              {sessionsTotal || sessions.length}
             </Badge>
             {tab === "sessions" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
@@ -451,7 +678,7 @@ function DashboardContent() {
             {/* Agent List */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Agents</h2>
+                <h2 className="text-lg font-semibold">Active Agents</h2>
                 <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
                   <input
                     type="checkbox"
@@ -522,6 +749,13 @@ function DashboardContent() {
                     </div>
                   );
                 })}
+                {agents.length === 0 && (
+                  <div className="rounded-xl border border-border/50 bg-card p-12 text-center">
+                    <div className="text-4xl mb-3">😴</div>
+                    <div className="text-sm font-medium text-muted-foreground">No active agents</div>
+                    <div className="text-xs text-muted-foreground/60 mt-1">All agents are idle or stopped. Check back soon!</div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -864,6 +1098,7 @@ function DashboardContent() {
                           <Badge variant="outline" className={`text-[10px] border ${agentColors[session.agentId] || "text-zinc-400"}`}>
                             {session.agentId}
                           </Badge>
+
                           <span className="text-[11px] font-mono text-muted-foreground">
                             {session.model}
                           </span>
@@ -874,6 +1109,45 @@ function DashboardContent() {
                             {formatRelativeTime(session.lastActivityAt)}
                           </span>
                         </div>
+                        <ProjectTagChips
+                          session={session}
+                          allProjects={projects}
+                          onRemove={async (projectId) => {
+                            const prev = session.projects ?? [];
+                            setSessions((s) =>
+                              s.map((sess) =>
+                                sess.id === session.id
+                                  ? { ...sess, projects: prev.filter((p) => p.id !== projectId) }
+                                  : sess
+                              )
+                            );
+                            try {
+                              await removeSessionProject(session.id, projectId);
+                            } catch {
+                              setSessions((s) =>
+                                s.map((sess) => (sess.id === session.id ? { ...sess, projects: prev } : sess))
+                              );
+                            }
+                          }}
+                          onAdd={async (projectId) => {
+                            const proj = projects.find((p) => p.id === projectId);
+                            if (!proj) return;
+                            const prev = session.projects ?? [];
+                            const next = [...prev, { id: proj.id, name: proj.name }];
+                            setSessions((s) =>
+                              s.map((sess) =>
+                                sess.id === session.id ? { ...sess, projects: next } : sess
+                              )
+                            );
+                            try {
+                              await setSessionProjects(session.id, next.map((p) => p.id));
+                            } catch {
+                              setSessions((s) =>
+                                s.map((sess) => (sess.id === session.id ? { ...sess, projects: prev } : sess))
+                              );
+                            }
+                          }}
+                        />
                       </div>
 
                       {/* Right stats */}
@@ -893,6 +1167,33 @@ function DashboardContent() {
                 </div>
               )}
             </div>
+
+            {/* Session Pagination */}
+            {sessionsTotal > SESSIONS_PER_PAGE && (
+              <div className="flex items-center justify-between mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  disabled={sessionPage <= 1}
+                  onClick={() => setSessionPage(sessionPage - 1)}
+                >
+                  Previous
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Page {sessionPage} of {Math.ceil(sessionsTotal / SESSIONS_PER_PAGE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  disabled={sessionPage >= Math.ceil(sessionsTotal / SESSIONS_PER_PAGE)}
+                  onClick={() => setSessionPage(sessionPage + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -965,7 +1266,15 @@ function DashboardContent() {
                       </p>
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span>{project.sessionCount} sessions</span>
-                        <span>{formatRelativeTime(project.updatedAt)}</span>
+                        {project.firstActivityAt && project.lastActivityAt && (
+                          <span>{formatTimeline(project.firstActivityAt, project.lastActivityAt)}</span>
+                        )}
+                        {project.durationMs != null && project.durationMs > 0 && (
+                          <span>{formatDuration(project.durationMs)}</span>
+                        )}
+                        {!project.firstActivityAt && (
+                          <span>{formatRelativeTime(project.updatedAt)}</span>
+                        )}
                       </div>
                     </div>
                     <div className="text-right shrink-0 ml-4">

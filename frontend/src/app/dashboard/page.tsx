@@ -80,7 +80,7 @@ type SessionSort = "recent" | "cost" | "tokens";
 type AlertFilter = "all" | "critical" | "warning" | "info";
 
 const ALERTS_PER_PAGE = 5;
-const SESSIONS_PER_PAGE = 20;
+const SESSIONS_PER_PAGE = 10;
 
 function ProjectTagChips({
   session,
@@ -911,7 +911,7 @@ function DashboardContent() {
 
             {/* Session Pagination */}
             {sessionsTotal > SESSIONS_PER_PAGE && (
-              <div className="flex items-center justify-center gap-3 pt-2">
+              <div className="flex items-center justify-between mt-3">
                 <Button
                   variant="outline"
                   size="sm"

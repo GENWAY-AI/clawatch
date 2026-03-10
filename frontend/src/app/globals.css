@@ -5,14 +5,28 @@
 @custom-variant dark (&:is(.dark *));
 
 /* Remove recharts chart area white border on click/focus */
-.recharts-surface {
+.recharts-surface,
+.recharts-surface * {
   outline: none !important;
 }
-.recharts-surface:focus {
-  outline: none !important;
+.recharts-surface rect:first-child {
+  stroke: none !important;
+  fill: none !important;
 }
 .recharts-cartesian-grid-bg {
   fill: none !important;
+  stroke: none !important;
+}
+.recharts-wrapper {
+  outline: none !important;
+  border: none !important;
+}
+.recharts-wrapper:focus,
+.recharts-wrapper:active,
+.recharts-surface:focus,
+.recharts-surface:active {
+  outline: none !important;
+  border: none !important;
 }
 /* Hide the white cursor line on hover */
 .recharts-tooltip-cursor {

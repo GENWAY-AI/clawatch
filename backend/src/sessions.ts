@@ -120,12 +120,27 @@ function extractTextContent(content: any): string {
 
 function extractToolUse(content: any): { name: string; input: string } | null {
   if (!Array.isArray(content)) return null;
-  const tool = content.find((c: any) => c.type === "tool_use");
+  // OpenClaw JSONL uses "toolCall" for tool invocations; Anthropic API uses "tool_use"
+  const tool = content.find((c: any) => c.type === "tool_use" || c.type === "toolCall");
   if (!tool) return null;
+  const rawInput = tool.input || tool.arguments || {};
   return {
     name: tool.name || "",
-    input: truncate(typeof tool.input === "string" ? tool.input : JSON.stringify(tool.input || {}), 500),
+    input: truncate(typeof rawInput === "string" ? rawInput : JSON.stringify(rawInput), 500),
   };
+}
+
+function extractAllToolCalls(content: any): Array<{ name: string; input: string }> {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((c: any) => c.type === "tool_use" || c.type === "toolCall")
+    .map((c: any) => {
+      const rawInput = c.input || c.arguments || {};
+      return {
+        name: c.name || "unknown",
+        input: truncate(typeof rawInput === "string" ? rawInput : JSON.stringify(rawInput), 500),
+      };
+    });
 }
 
 function isRealUserMessage(text: string): boolean {
@@ -274,8 +289,17 @@ async function parseSessionFile(
         const role: SessionDetailMessage["role"] =
           msg.role === "toolResult" ? "tool" : msg.role === "user" ? "user" : "assistant";
 
-        const text = extractTextContent(msg.content);
+        let text = extractTextContent(msg.content);
         const toolUse = msg.role === "assistant" ? extractToolUse(msg.content) : null;
+
+        // For assistant messages with no text content but with tool calls,
+        // generate descriptive content so they aren't invisible in the UI
+        if (role === "assistant" && !text) {
+          const allTools = extractAllToolCalls(msg.content);
+          if (allTools.length > 0) {
+            text = allTools.map((t) => `Called ${t.name}`).join(", ");
+          }
+        }
 
         const detailMsg: SessionDetailMessage = {
           id: parsed.id || `msg-${messageCount}`,

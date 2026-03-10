@@ -185,7 +185,19 @@ export default function DashboardPage() {
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<Tab>("agents");
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const [tab, setTabRaw] = useState<Tab>(tabParam && ["agents", "sessions", "projects"].includes(tabParam) ? tabParam : "agents");
+
+  function setTab(t: Tab) {
+    setTabRaw(t);
+    const params = new URLSearchParams(searchParams.toString());
+    if (t === "agents") {
+      params.delete("tab");
+    } else {
+      params.set("tab", t);
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
   const [agents, setAgents] = useState<Agent[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsTotal, setAlertsTotal] = useState(0);
@@ -194,8 +206,14 @@ function DashboardContent() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionsTotal, setSessionsTotal] = useState(0);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [sessionFilter, setSessionFilterRaw] = useState<SessionFilter>("active");
-  const [sessionSort, setSessionSortRaw] = useState<SessionSort>("recent");
+  const sessionFilterParam = searchParams.get("sessionFilter") as SessionFilter | null;
+  const sessionSortParam = searchParams.get("sessionSort") as SessionSort | null;
+  const [sessionFilter, setSessionFilterRaw] = useState<SessionFilter>(
+    sessionFilterParam && ["all", "active", "idle", "completed"].includes(sessionFilterParam) ? sessionFilterParam : "active"
+  );
+  const [sessionSort, setSessionSortRaw] = useState<SessionSort>(
+    sessionSortParam && ["recent", "cost", "tokens"].includes(sessionSortParam) ? sessionSortParam : "recent"
+  );
   const [showIdleAgents, setShowIdleAgents] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -233,8 +251,12 @@ function DashboardContent() {
 
   function setSessionFilter(f: SessionFilter) {
     setSessionFilterRaw(f);
-    // Reset page when filter changes
     const params = new URLSearchParams(searchParams.toString());
+    if (f === "active") {
+      params.delete("sessionFilter");
+    } else {
+      params.set("sessionFilter", f);
+    }
     params.delete("sessionPage");
     router.replace(`?${params.toString()}`, { scroll: false });
   }
@@ -242,6 +264,11 @@ function DashboardContent() {
   function setSessionSort(s: SessionSort) {
     setSessionSortRaw(s);
     const params = new URLSearchParams(searchParams.toString());
+    if (s === "recent") {
+      params.delete("sessionSort");
+    } else {
+      params.set("sessionSort", s);
+    }
     params.delete("sessionPage");
     router.replace(`?${params.toString()}`, { scroll: false });
   }

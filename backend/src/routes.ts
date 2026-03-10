@@ -345,7 +345,7 @@ router.get("/sessions", async (req: Request, res: Response) => {
     let sessions = await listSessions(profileFilter);
 
     // Filter by agentId
-    const { agentId, status, sort, limit } = req.query;
+    const { agentId, status, sort, limit, offset } = req.query;
     if (agentId) {
       sessions = sessions.filter((s) => s.agentId === agentId);
     }
@@ -365,10 +365,13 @@ router.get("/sessions", async (req: Request, res: Response) => {
     }
     // default: already sorted by lastActivityAt DESC
 
-    // Limit
-    const limitStr = Array.isArray(limit) ? limit[0] : limit;
-    const max = Math.min(parseInt(limitStr as string, 10) || 50, 500);
-    sessions = sessions.slice(0, max);
+    // Total count (after filtering, before pagination)
+    const total = sessions.length;
+
+    // Pagination
+    const limitVal = Math.min(Math.max(parseInt(limit as string, 10) || 20, 1), 500);
+    const offsetVal = Math.max(parseInt(offset as string, 10) || 0, 0);
+    sessions = sessions.slice(offsetVal, offsetVal + limitVal);
 
     // Attach project tags to each session
     const sessionIds = sessions.map((s) => s.id);
@@ -378,7 +381,7 @@ router.get("/sessions", async (req: Request, res: Response) => {
       projects: projectTags.get(s.id) || [],
     }));
 
-    res.json({ sessions: sessionsWithProjects });
+    res.json({ sessions: sessionsWithProjects, total });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to list sessions" });
   }

@@ -53,6 +53,125 @@ function checkStuckAgents(): void {
   }
 }
 
+function summarizeErrors(errors: { error: string }[]): string {
+  if (errors.length === 0) return "Unknown error";
+
+  // Count occurrences of each error message
+  const counts = new Map<string, number>();
+  for (const e of errors) {
+    const msg = e.error || "Unknown error";
+    counts.set(msg, (counts.get(msg) || 0) + 1);
+  }
+
+  // Get the most common error
+  let topError = "";
+  let topCount = 0;
+  for (const [msg, cnt] of counts) {
+    if (cnt > topCount) { topError = msg; topCount = cnt; }
+  }
+
+  // Extract a clean, short summary from the error message
+  return extractErrorSummary(topError);
+}
+
+// Strip common log prefixes: timestamps, log levels, bracketed tags
+function stripLogPrefix(error: string): string {
+  let cleaned = error;
+  cleaned = cleaned.replace(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[\d.+:ZT-]*\s*/g, "");
+  cleaned = cleaned.replace(/^\[[\w.-]+\]\s*/g, "");
+  cleaned = cleaned.replace(/^\[[\w.-]+\]\s*/g, "");
+  cleaned = cleaned.replace(/^(ERROR|WARN|INFO|DEBUG|FATAL|TRACE)[:\s]+/i, "");
+  return cleaned.trim();
+}
+
+function extractErrorSummary(error: string): string {
+  // Strip log timestamps/tags first
+  const cleaned = stripLogPrefix(error);
+
+  // Common patterns → human-readable summaries
+  const patterns: [RegExp, string][] = [
+    // Network
+    [/ECONNREFUSED/i, "Connection refused"],
+    [/ECONNRESET/i, "Connection lost"],
+    [/ETIMEDOUT/i, "Connection timed out"],
+    [/ENOTFOUND/i, "Can't reach remote server"],
+    [/EADDRINUSE/i, "Port already in use"],
+    [/EPERM|EACCES/i, "Permission denied"],
+    [/ENOMEM|out of memory|heap|OOM/i, "Out of memory"],
+    // HTTP
+    [/rate.?limit/i, "API rate limit exceeded"],
+    [/401|unauthorized/i, "Authentication failed"],
+    [/403|forbidden/i, "Access denied"],
+    [/500|internal server error/i, "Remote server error"],
+    [/502|bad gateway/i, "Bad gateway"],
+    [/503|service unavailable/i, "Service unavailable"],
+    [/504|gateway timeout/i, "Gateway timeout"],
+    // Code
+    [/Cannot read propert/i, "Code bug (null reference)"],
+    [/is not a function/i, "Code bug (type error)"],
+    [/JSON\.parse|Unexpected token/i, "Malformed data received"],
+    [/SQLITE_BUSY/i, "Database locked"],
+    [/SQLITE_CORRUPT/i, "Database corruption"],
+    // Auth/cert
+    [/CERT_|certificate/i, "SSL certificate error"],
+    [/token.*expir/i, "Auth token expired"],
+    // File/path
+    [/ENOENT|no such file/i, "Missing file or directory"],
+    [/EISDIR/i, "Invalid file operation"],
+    // OpenClaw / gateway specific
+    [/[Ss]lack\s*bot\s*token\s*missing/i, "Slack credentials not configured"],
+    [/[Rr]etry failed for delivery/i, "Message delivery failing"],
+    [/socket.?mode failed/i, "Slack connection failing"],
+    [/pong wasn't received|pong.*timeout/i, "Slack connection timing out"],
+    [/[Uu]nhandled promise rejection/i, "Unhandled crash"],
+    [/allowlist contains unknown/i, "Misconfigured tool settings"],
+    [/[Ss]kipping skill path/i, "Skill path issue"],
+    [/hostname conflict/i, "Hostname conflict"],
+    [/spawn.*ENOENT|command not found/i, "Missing required command"],
+    [/killed|SIGKILL|SIGTERM/i, "Process was killed"],
+    // Generic (broad — keep last)
+    [/timeout/i, "Operation timed out"],
+    [/connection refused/i, "Connection refused"],
+    [/missing.*config|config.*missing/i, "Missing configuration"],
+  ];
+
+  for (const [pattern, summary] of patterns) {
+    if (pattern.test(cleaned)) return summary;
+  }
+
+  // Smart fallback: interpret the error instead of truncating
+  return smartFallback(cleaned);
+}
+
+function smartFallback(cleaned: string): string {
+  // Try "ErrorType: message" format
+  const typeMatch = cleaned.match(/^(\w+Error):\s*(.+?)(?:\n|$)/);
+  if (typeMatch) {
+    const msg = typeMatch[2].trim();
+    return msg.length > 50 ? msg.slice(0, 47) + "..." : msg;
+  }
+
+  // Look for a verb phrase
+  const actionMatch = cleaned.match(/(failed to \w+|cannot \w+|unable to \w+|could not \w+)/i);
+  if (actionMatch) {
+    return actionMatch[1].charAt(0).toUpperCase() + actionMatch[1].slice(1).toLowerCase();
+  }
+
+  // Keyword-based categorization
+  const lower = cleaned.toLowerCase();
+  if (lower.includes("connect") || lower.includes("socket")) return "Connection issue";
+  if (lower.includes("permission") || lower.includes("denied") || lower.includes("access")) return "Permission error";
+  if (lower.includes("invalid") || lower.includes("unexpected") || lower.includes("unknown")) return "Invalid data or configuration";
+  if (lower.includes("missing") || lower.includes("not found")) return "Missing resource";
+  if (lower.includes("failed") || lower.includes("error") || lower.includes("crash")) return "Operation failed";
+
+  // Last resort: first clause only, very short
+  const firstLine = cleaned.replace(/\n.*/s, "").trim();
+  if (!firstLine || firstLine.length < 5) return "Unknown error";
+  const clause = firstLine.split(/[,;(]/)[0].trim();
+  return clause.length > 50 ? clause.slice(0, 47) + "..." : clause;
+}
+
 function checkErrorSpikes(): void {
   const since = new Date(Date.now() - ERROR_SPIKE_WINDOW_MS).toISOString();
   const rows = db.prepare(`
@@ -65,11 +184,26 @@ function checkErrorSpikes(): void {
 
   for (const row of rows) {
     if (recentAlertExists(row.agentId, "error", ERROR_SPIKE_WINDOW_MS)) continue;
+
+    // Fetch actual error messages to generate a specific title
+    const errors = db.prepare(`
+      SELECT data FROM events
+      WHERE agentId = ? AND type = 'error' AND timestamp > ?
+      ORDER BY timestamp DESC
+    `).all(row.agentId, since).map((e: any) => {
+      const parsed = JSON.parse(e.data);
+      return { error: parsed.error || parsed.message || "Unknown error" };
+    });
+
+    const agent = db.prepare("SELECT name FROM agents WHERE id = ?").get(row.agentId) as { name: string } | undefined;
+    const agentName = agent?.name || row.agentId;
+    const errorSummary = summarizeErrors(errors);
+
     createAndSendAlert(
       row.agentId,
       "error",
       "critical",
-      `Error spike detected — ${row.cnt} errors in the last ${Math.round(ERROR_SPIKE_WINDOW_MS / 60000)} minute(s)`
+      `${agentName}: ${errorSummary} (${row.cnt}× in ${Math.round(ERROR_SPIKE_WINDOW_MS / 60000)}min)`
     );
   }
 }

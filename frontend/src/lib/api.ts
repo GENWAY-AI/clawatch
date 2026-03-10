@@ -1,5 +1,5 @@
-import { Agent, Alert, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile, AnalyticsData } from "./types";
-import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails } from "./mock-data";
+import { Agent, Alert, AlertDetails, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile, AnalyticsData } from "./types";
+import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails, mockAlertDetails } from "./mock-data";
 
 // API_BASE: In the npm CLI, both frontend and API run on different ports.
 // The frontend server proxies /api/* to the backend, so we use relative URLs.
@@ -121,6 +121,22 @@ export async function resumeAgent(id: string): Promise<void> {
 export async function acknowledgeAlert(id: string): Promise<void> {
   if (USE_MOCK) return;
   await fetchJson(`/api/alerts/${id}/acknowledge`, { method: "POST" });
+}
+
+export async function getAlertDetails(id: string): Promise<AlertDetails> {
+  if (USE_MOCK) {
+    const detail = mockAlertDetails[id];
+    if (detail) return detail;
+    throw new Error("Alert not found");
+  }
+  try {
+    return await fetchJson<AlertDetails>(`/api/alerts/${id}/details`);
+  } catch {
+    console.warn("API unreachable, falling back to mock data");
+    const detail = mockAlertDetails[id];
+    if (detail) return detail;
+    throw new Error("Alert not found");
+  }
 }
 
 export interface SessionsResponse {

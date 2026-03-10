@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { fork, spawn, ChildProcess } from 'child_process';
-import { loadConfig, saveConfig, configExists, paths, ensureDir, ClaWatchConfig } from './config';
+import { loadConfig, saveConfig, configExists, paths, ensureDir, ClaWatchConfig, savePids, loadPids, clearPids, ManagedPids } from './config';
 import { execSync } from 'child_process';
 
 import * as net from 'net';
@@ -14,22 +14,89 @@ import * as net from 'net';
 // SSOT: read version from package.json
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
 
-// --- Helper: find a free port starting from preferred ---
-function findFreePort(preferred: number): Promise<number> {
+// --- Helper: check if a port is free ---
+function isPortFree(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const server = net.createServer();
-    server.listen(preferred, () => {
-      server.close(() => resolve(preferred));
+    server.listen(port, () => {
+      server.close(() => resolve(true));
     });
-    server.on('error', () => {
-      // Port taken, try next
-      const next = net.createServer();
-      next.listen(0, () => {
-        const port = (next.address() as net.AddressInfo).port;
-        next.close(() => resolve(port));
-      });
-    });
+    server.on('error', () => resolve(false));
   });
+}
+
+// --- Helper: kill a process by PID (returns true if killed) ---
+function killPid(pid: number): boolean {
+  try {
+    process.kill(pid, 0); // check if alive
+    process.kill(pid, 'SIGTERM');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// --- Helper: kill process occupying a port (macOS/Linux) ---
+function killProcessOnPort(port: number, signal: NodeJS.Signals = 'SIGTERM'): boolean {
+  try {
+    const output = execSync(`lsof -ti :${port} 2>/dev/null || /usr/sbin/lsof -ti :${port} 2>/dev/null`, { encoding: 'utf-8' }).trim();
+    if (!output) return false;
+    const pids = output.split('\n').map(p => parseInt(p, 10)).filter(p => !isNaN(p));
+    for (const pid of pids) {
+      try { process.kill(pid, signal); } catch { /* already dead */ }
+    }
+    return pids.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+// --- Helper: kill ALL managed ClaWatch processes ---
+function killAllManagedProcesses(): void {
+  // 1. Kill tracked PIDs from pids file
+  const pids = loadPids();
+  for (const [role, pid] of Object.entries(pids)) {
+    if (pid && typeof pid === 'number') {
+      if (killPid(pid)) {
+        console.log(chalk.yellow(`  Killed previous ${role} (PID: ${pid})`));
+      }
+    }
+  }
+
+  // 2. Also kill legacy single PID file
+  if (fs.existsSync(paths.pid)) {
+    const oldPid = parseInt(fs.readFileSync(paths.pid, 'utf-8').trim(), 10);
+    if (!isNaN(oldPid)) killPid(oldPid);
+  }
+
+  clearPids();
+}
+
+// --- Helper: ensure port is available, killing stale ClaWatch processes if needed ---
+async function ensurePort(port: number, label: string): Promise<void> {
+  if (await isPortFree(port)) return;
+
+  // Try SIGTERM first
+  console.log(chalk.yellow(`  Port ${port} is occupied (${label}). Killing stale process (SIGTERM)...`));
+  killProcessOnPort(port, 'SIGTERM');
+
+  for (let i = 0; i < 6; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    if (await isPortFree(port)) return;
+  }
+
+  // Escalate to SIGKILL
+  console.log(chalk.yellow(`  Process didn't exit cleanly. Sending SIGKILL...`));
+  killProcessOnPort(port, 'SIGKILL');
+
+  for (let i = 0; i < 6; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    if (await isPortFree(port)) return;
+  }
+
+  console.log(chalk.red(`  ERROR: Port ${port} is still occupied after cleanup. Cannot start ${label}.`));
+  console.log(chalk.red(`  Run: lsof -i :${port}   to see what's using it.`));
+  process.exit(1);
 }
 
 // --- Helper: ensure better-sqlite3 native addon is built ---
@@ -113,17 +180,9 @@ program
   .action(async (opts) => {
     console.log(chalk.bold('\n🔍 ClaWatch — AI Agent Observability\n'));
 
-    // Kill existing daemon if running
-    if (fs.existsSync(paths.pid)) {
-      const oldPid = parseInt(fs.readFileSync(paths.pid, 'utf-8').trim(), 10);
-      try {
-        process.kill(oldPid, 'SIGTERM');
-        console.log(chalk.yellow(`Stopped previous daemon (PID: ${oldPid})`));
-      } catch {
-        // Already dead
-      }
-      fs.unlinkSync(paths.pid);
-    }
+    // Kill ALL existing ClaWatch processes (daemon + backend + frontend)
+    console.log(chalk.blue('Cleaning up previous processes...'));
+    killAllManagedProcesses();
 
     // Auto-init if needed
     if (!configExists()) {
@@ -153,20 +212,13 @@ program
     }
 
     const config = loadConfig();
-    const port = opts.port || '3001';
 
-    const preferredBackend = 3001;
-    const preferredFrontend = parseInt(port, 10) || 3456;
+    const backendPort = 3001;
+    const frontendPort = parseInt(opts.port, 10) || 3456;
 
-    const backendPort = await findFreePort(preferredBackend);
-    const frontendPort = await findFreePort(preferredFrontend === backendPort ? preferredFrontend + 1 : preferredFrontend);
-
-    if (backendPort !== preferredBackend) {
-      console.log(chalk.yellow(`  Port ${preferredBackend} in use, using ${backendPort} for API`));
-    }
-    if (frontendPort !== preferredFrontend) {
-      console.log(chalk.yellow(`  Port ${preferredFrontend} in use, using ${frontendPort} for dashboard`));
-    }
+    // Ensure ports are available — kill stale processes, don't silently pick random ports
+    await ensurePort(backendPort, 'backend API');
+    await ensurePort(frontendPort, 'dashboard');
 
     const BACKEND_PORT = String(backendPort);
     const FRONTEND_PORT = String(frontendPort);
@@ -242,8 +294,9 @@ program
     // 3. Start monitoring daemon
     console.log(chalk.blue('Starting monitoring...'));
     const daemonPath = path.join(__dirname, 'daemon.js');
+    let daemonProcess: ChildProcess | null = null;
     if (fs.existsSync(daemonPath)) {
-      const daemonProcess = fork(daemonPath, [], {
+      daemonProcess = fork(daemonPath, [], {
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       });
       daemonProcess.stdout?.on('data', (d: Buffer) => {
@@ -252,7 +305,19 @@ program
       });
     }
 
-    // 4. Wait for dashboard to be ready, then open browser
+    // 4. Save ALL process PIDs for reliable cleanup
+    const managedPids: ManagedPids = {};
+    if (daemonProcess?.pid) managedPids.daemon = daemonProcess.pid;
+    if (backendProcess?.pid) managedPids.backend = backendProcess.pid;
+    if (frontendProcess?.pid) managedPids.frontend = frontendProcess.pid;
+    savePids(managedPids);
+    // Also write legacy PID file for backward compat
+    if (daemonProcess?.pid) {
+      fs.writeFileSync(paths.pid, String(daemonProcess.pid));
+    }
+    console.log(chalk.gray(`  Tracking PIDs: ${JSON.stringify(managedPids)}`));
+
+    // 5. Wait for dashboard to be ready, then open browser
     const dashUrl = `http://localhost:${FRONTEND_PORT}`;
     console.log(chalk.blue(`\nWaiting for dashboard...`));
 
@@ -291,17 +356,23 @@ program
       console.log(chalk.yellow(`   Try opening ${dashUrl} manually.`));
     }
 
-    // Keep process alive
-    process.on('SIGINT', () => {
-      console.log(chalk.yellow('\nShutting down...'));
+    // Keep process alive — clean shutdown kills ALL child processes and clears PID files
+    const shutdown = (signal: string) => {
+      console.log(chalk.yellow(`\nShutting down (${signal})...`));
       if (backendProcess) backendProcess.kill();
       if (frontendProcess) frontendProcess.kill();
+      if (daemonProcess) daemonProcess.kill();
+      clearPids();
       process.exit(0);
-    });
-    process.on('SIGTERM', () => {
-      if (backendProcess) backendProcess.kill();
-      if (frontendProcess) frontendProcess.kill();
-      process.exit(0);
+    };
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('exit', () => {
+      // Last-resort cleanup: if parent dies, kill children
+      if (backendProcess?.pid) try { process.kill(backendProcess.pid, 'SIGTERM'); } catch {}
+      if (frontendProcess?.pid) try { process.kill(frontendProcess.pid, 'SIGTERM'); } catch {}
+      if (daemonProcess?.pid) try { process.kill(daemonProcess.pid, 'SIGTERM'); } catch {}
+      clearPids();
     });
   });
 
@@ -318,22 +389,53 @@ program
 
 program
   .command('stop')
-  .description('Stop the ClaWatch daemon')
+  .description('Stop all ClaWatch processes (backend, frontend, daemon)')
   .action(() => {
-    if (!fs.existsSync(paths.pid)) {
-      console.log(chalk.yellow('No daemon running'));
+    const pids = loadPids();
+    const hasPids = Object.keys(pids).length > 0;
+    const hasLegacyPid = fs.existsSync(paths.pid);
+
+    if (!hasPids && !hasLegacyPid) {
+      // Last resort: try killing processes on known ports
+      const killedBackend = killProcessOnPort(3001);
+      const killedFrontend = killProcessOnPort(3456);
+      if (killedBackend || killedFrontend) {
+        console.log(chalk.green('Killed ClaWatch processes found on ports 3001/3456'));
+      } else {
+        console.log(chalk.yellow('No ClaWatch processes found'));
+      }
       process.exit(0);
     }
 
-    const pid = parseInt(fs.readFileSync(paths.pid, 'utf-8').trim(), 10);
-    try {
-      process.kill(pid, 'SIGTERM');
-      fs.unlinkSync(paths.pid);
-      console.log(chalk.green(`Daemon stopped (PID: ${pid})`));
-    } catch {
-      fs.unlinkSync(paths.pid);
-      console.log(chalk.yellow('Daemon was not running (stale PID removed)'));
+    let stopped = 0;
+    for (const [role, pid] of Object.entries(pids)) {
+      if (pid && typeof pid === 'number') {
+        if (killPid(pid)) {
+          console.log(chalk.green(`Stopped ${role} (PID: ${pid})`));
+          stopped++;
+        } else {
+          console.log(chalk.yellow(`${role} (PID: ${pid}) was not running`));
+        }
+      }
     }
+
+    // Also handle legacy PID file
+    if (hasLegacyPid) {
+      const legacyPid = parseInt(fs.readFileSync(paths.pid, 'utf-8').trim(), 10);
+      if (!isNaN(legacyPid) && !Object.values(pids).includes(legacyPid)) {
+        if (killPid(legacyPid)) {
+          console.log(chalk.green(`Stopped legacy daemon (PID: ${legacyPid})`));
+          stopped++;
+        }
+      }
+    }
+
+    // Also kill anything left on known ports
+    killProcessOnPort(3001);
+    killProcessOnPort(3456);
+
+    clearPids();
+    console.log(chalk.green(`\nAll ClaWatch processes stopped (${stopped} killed)`));
   });
 
 program
@@ -346,25 +448,26 @@ program
     }
 
     const config = loadConfig();
-    let daemonRunning = false;
-    let daemonPid = 0;
-    if (fs.existsSync(paths.pid)) {
-      daemonPid = parseInt(fs.readFileSync(paths.pid, 'utf-8').trim(), 10);
+    const pids = loadPids();
+    const processStatus = (role: string, pid?: number): string => {
+      if (!pid) return chalk.red('not tracked');
       try {
-        process.kill(daemonPid, 0);
-        daemonRunning = true;
+        process.kill(pid, 0);
+        return chalk.green(`running (PID: ${pid})`);
       } catch {
-        daemonRunning = false;
+        return chalk.red(`stopped (stale PID: ${pid})`);
       }
-    }
+    };
 
     let totalAgentCount = 0;
     let totalSessionCount = 0;
 
     console.log(chalk.bold('\n🔍 ClaWatch Status\n'));
-    console.log(`  Daemon:   ${daemonRunning ? chalk.green(`running (PID: ${daemonPid})`) : chalk.red('stopped')}`);
-    console.log(`  Backend:  ${config.backendUrl}`);
-    console.log(`  Profiles: ${config.openclawDirs.length}`);
+    console.log(`  Backend:   ${processStatus('backend', pids.backend)}`);
+    console.log(`  Frontend:  ${processStatus('frontend', pids.frontend)}`);
+    console.log(`  Daemon:    ${processStatus('daemon', pids.daemon)}`);
+    console.log(`  API URL:   ${config.backendUrl}`);
+    console.log(`  Profiles:  ${config.openclawDirs.length}`);
 
     for (const openclawDir of config.openclawDirs) {
       const dirName = path.basename(openclawDir);
@@ -387,7 +490,7 @@ program
       console.log(`  Profile "${profileName}": ${agentCount} agents, ${sessionCount} sessions`);
     }
 
-    console.log(`  Total:    ${totalAgentCount} agents, ${totalSessionCount} sessions`);
+    console.log(`  Total:     ${totalAgentCount} agents, ${totalSessionCount} sessions`);
   });
 
 program

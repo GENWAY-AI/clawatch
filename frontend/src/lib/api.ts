@@ -140,6 +140,7 @@ export async function getSessions(
   }
   try {
     const params = new URLSearchParams();
+    params.set("limit", "500");
     if (agentId) params.set("agentId", agentId);
     if (status) params.set("status", status);
     if (sort) params.set("sort", sort);

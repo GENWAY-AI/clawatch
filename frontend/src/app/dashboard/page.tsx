@@ -244,32 +244,90 @@ function DashboardContent() {
         {/* Alert Banner */}
         {bannerAlerts.length > 0 && (
           <div className="space-y-2">
-            {criticalAlerts.map((alert) => (
-              <div
-                key={alert.id}
-                className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${
-                  alert.severity === "critical"
-                    ? "border-red-500/30 bg-red-500/5 text-red-400"
-                    : "border-amber-500/30 bg-amber-500/5 text-amber-400"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs font-bold uppercase">
-                    {alert.severity}
-                  </span>
-                  <span>{alert.message}</span>
-                  <span className="text-xs opacity-60">{formatRelativeTime(alert.timestamp)}</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => handleAcknowledge(alert.id)}
-                  className="text-current hover:bg-white/10"
+            {bannerAlerts.map((alert) => {
+              const expanded = expandedAlerts[alert.id];
+              const isExpanded = !!expanded;
+              const isLoading = expanded === "loading";
+              const details = expanded && expanded !== "loading" ? expanded : null;
+              return (
+                <div
+                  key={alert.id}
+                  className={`rounded-lg border overflow-hidden text-sm ${
+                    alert.severity === "critical"
+                      ? "border-red-500/30 bg-red-500/5 text-red-400"
+                      : "border-amber-500/30 bg-amber-500/5 text-amber-400"
+                  }`}
                 >
-                  Acknowledge
-                </Button>
+                  <div
+                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                    onClick={() => handleToggleAlertDetails(alert.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <svg
+                        className={`size-3.5 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
+                      <span className="font-mono text-xs font-bold uppercase">
+                        {alert.severity}
+                      </span>
+                      <span>{alert.message}</span>
+                      <span className="text-xs opacity-60">{formatRelativeTime(alert.timestamp)}</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={(e) => { e.stopPropagation(); handleAcknowledge(alert.id); }}
+                      className="text-current hover:bg-white/10"
+                    >
+                      Acknowledge
+                    </Button>
+                  </div>
+                  {isExpanded && (
+                    <div className="px-4 pb-3 border-t border-current/10">
+                      {isLoading ? (
+                        <div className="flex items-center gap-2 py-3 text-xs opacity-60">
+                          <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          Loading details...
+                        </div>
+                      ) : details ? (
+                        <div className="pt-3 space-y-2">
+                          <div className="flex items-center gap-2 text-xs opacity-80 mb-2">
+                            <span>Agent:</span>
+                            <span className="font-medium">{details.agent.name}</span>
+                          </div>
+                          {details.context?.stuckDurationMinutes != null && (
+                            <div className="text-xs font-mono opacity-80">
+                              Stuck for {details.context.stuckDurationMinutes}m — last heartbeat {formatRelativeTime(details.context.lastHeartbeat!)}
+                            </div>
+                          )}
+                          {details.context?.currentCostUsd != null && (
+                            <div className="text-xs font-mono opacity-80">
+                              Current: ${details.context.currentCostUsd.toFixed(2)} / Threshold: ${details.context.thresholdUsd?.toFixed(2)} (+${details.context.overage?.toFixed(2)} over)
+                            </div>
+                          )}
+                          {details.relatedErrors.map((evt, i) => (
+                            <div key={i} className="flex items-start gap-2 text-xs">
+                              <span className="opacity-60 shrink-0 w-16">{formatRelativeTime(evt.timestamp)}</span>
+                              <span className="font-mono opacity-80 break-all">{evt.error}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {hiddenBannerCount > 0 && (
+              <div className="text-xs text-muted-foreground text-center py-1">
+                +{hiddenBannerCount} more alert{hiddenBannerCount > 1 ? "s" : ""} — see All Alerts below
               </div>
-            ))}
+            )}
           </div>
         )}
 

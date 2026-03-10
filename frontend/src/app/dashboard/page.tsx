@@ -1108,20 +1108,24 @@ function DashboardContent() {
                           <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
                           <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                           <Tooltip
-                            contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
-                            labelStyle={{ color: "#a1a1aa" }}
-                            labelFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                            formatter={(value, name) => {
-                              const v = Number(value);
-                              if (name === "costUsd") return [`$${v.toFixed(2)}`, "Cost"];
-                              if (name === "tokenCount") return [formatTokens(v), "Tokens"];
-                              if (name === "sessionCount") return [v, "Sessions"];
-                              return [v, String(name)];
+                            content={({ active, payload, label }) => {
+                              if (!active || !payload?.length) return null;
+                              const bucket = analyticsData.buckets.find((b) => b.date === label);
+                              const dateStr = new Date(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                              const cost = bucket?.costUsd?.toFixed(2) ?? "0";
+                              const tokens = formatTokens(bucket?.tokenCount ?? 0);
+                              const sess = bucket?.sessionCount ?? 0;
+                              return (
+                                <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
+                                  <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{dateStr}</div>
+                                  <div style={{ color: "#e4e4e7", fontSize: 13 }}>{"Cost: $"}{cost}</div>
+                                  <div style={{ color: "#a1a1aa", fontSize: 12 }}>{"Tokens: "}{tokens}</div>
+                                  <div style={{ color: "#a1a1aa", fontSize: 12 }}>{"Sessions: "}{sess}</div>
+                                </div>
+                              );
                             }}
                           />
                           <Area type="monotone" dataKey="costUsd" stroke="#10b981" fill="#10b981" fillOpacity={0.3} strokeWidth={2} />
-                          <Area type="monotone" dataKey="tokenCount" stroke="transparent" fill="transparent" />
-                          <Area type="monotone" dataKey="sessionCount" stroke="transparent" fill="transparent" />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
@@ -1160,12 +1164,21 @@ function DashboardContent() {
                               />
                               <Legend
                                 wrapperStyle={{ color: "#a1a1aa", fontSize: 12, cursor: "pointer" }}
-                                onClick={(e) => {
+                                onClick={(e, _idx, event) => {
                                   const key = String(e.dataKey);
+                                  const allKeys = analyticsData!.byProject.map((p) => p.name);
+                                  const nativeEvent = (event as unknown as React.MouseEvent)?.nativeEvent ?? event;
+                                  const isMulti = (nativeEvent as MouseEvent)?.metaKey || (nativeEvent as MouseEvent)?.ctrlKey;
                                   setHiddenProjectSeries((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(key)) next.delete(key); else next.add(key);
-                                    return next;
+                                    if (isMulti) {
+                                      const next = new Set(prev);
+                                      if (next.has(key)) next.delete(key); else next.add(key);
+                                      return next;
+                                    }
+                                    // Single click: if this is the only visible one, show all; otherwise solo it
+                                    const visible = allKeys.filter((k) => !prev.has(k));
+                                    if (visible.length === 1 && visible[0] === key) return new Set();
+                                    return new Set(allKeys.filter((k) => k !== key));
                                   });
                                 }}
                                 formatter={(value) => (
@@ -1224,12 +1237,20 @@ function DashboardContent() {
                               />
                               <Legend
                                 wrapperStyle={{ color: "#a1a1aa", fontSize: 12, cursor: "pointer" }}
-                                onClick={(e) => {
+                                onClick={(e, _idx, event) => {
                                   const key = String(e.dataKey);
+                                  const allKeys = analyticsData!.byAgent.map((a) => a.agentId);
+                                  const nativeEvent = (event as unknown as React.MouseEvent)?.nativeEvent ?? event;
+                                  const isMulti = (nativeEvent as MouseEvent)?.metaKey || (nativeEvent as MouseEvent)?.ctrlKey;
                                   setHiddenAgentSeries((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(key)) next.delete(key); else next.add(key);
-                                    return next;
+                                    if (isMulti) {
+                                      const next = new Set(prev);
+                                      if (next.has(key)) next.delete(key); else next.add(key);
+                                      return next;
+                                    }
+                                    const visible = allKeys.filter((k) => !prev.has(k));
+                                    if (visible.length === 1 && visible[0] === key) return new Set();
+                                    return new Set(allKeys.filter((k) => k !== key));
                                   });
                                 }}
                                 formatter={(value) => (

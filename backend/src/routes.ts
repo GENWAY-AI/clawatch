@@ -344,7 +344,7 @@ function humanizeError(error: string, agentName: string): string {
     [/ECONNREFUSED/i, `${agentName} can't connect to a service`],
     [/ECONNRESET/i, `${agentName} lost connection (reset by remote)`],
     [/ETIMEDOUT/i, `${agentName} connection timed out`],
-    [/ENOTFOUND\s+(\S+)/i, `${agentName} can't resolve hostname`],
+    [/ENOTFOUND/i, `${agentName} can't resolve hostname (DNS failure)`],
     [/rate.?limit/i, `${agentName} hit API rate limit`],
     [/401|unauthorized/i, `${agentName} authentication failed`],
     [/403|forbidden/i, `${agentName} access denied`],

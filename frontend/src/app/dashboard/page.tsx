@@ -6,9 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile } from "@/lib/types";
-import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject } from "@/lib/api";
+import { Agent, Alert, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile, AnalyticsData } from "@/lib/types";
+import { getAgents, getAlerts, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -74,7 +75,7 @@ const severityConfig: Record<AlertSeverity, { color: string; icon: string }> = {
   info: { color: "bg-blue-500/10 text-blue-400 border-blue-500/20", icon: "i" },
 };
 
-type Tab = "agents" | "sessions" | "projects";
+type Tab = "agents" | "sessions" | "projects" | "analytics";
 type SessionFilter = "all" | "active" | "idle" | "completed";
 type SessionSort = "recent" | "cost" | "tokens";
 type AlertFilter = "all" | "critical" | "warning" | "info";
@@ -186,7 +187,7 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab") as Tab | null;
-  const [tab, setTabRaw] = useState<Tab>(tabParam && ["agents", "sessions", "projects"].includes(tabParam) ? tabParam : "agents");
+  const [tab, setTabRaw] = useState<Tab>(tabParam && ["agents", "sessions", "projects", "analytics"].includes(tabParam) ? tabParam : "agents");
 
   function setTab(t: Tab) {
     setTabRaw(t);
@@ -223,8 +224,11 @@ function DashboardContent() {
   const [ackAllLoading, setAckAllLoading] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [version, setVersion] = useState<string | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const selectedProfile = searchParams.get("profile") || "default";
+  const analyticsGroupBy = (searchParams.get("groupBy") as "day" | "week") || "day";
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
   const sessionPage = Math.max(1, parseInt(searchParams.get("sessionPage") || "1", 10));
@@ -291,6 +295,32 @@ function DashboardContent() {
     params.delete("sessionPage");
     router.replace(`?${params.toString()}`, { scroll: false });
   }
+
+  function setAnalyticsGroupByParam(g: "day" | "week") {
+    const params = new URLSearchParams(searchParams.toString());
+    if (g === "day") {
+      params.delete("groupBy");
+    } else {
+      params.set("groupBy", g);
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  // Fetch analytics data only when the Analytics tab is active
+  useEffect(() => {
+    if (tab !== "analytics") return;
+    let cancelled = false;
+    setAnalyticsLoading(true);
+    getAnalytics({ profile: selectedProfile, groupBy: analyticsGroupBy }).then((data) => {
+      if (!cancelled) {
+        setAnalyticsData(data);
+        setAnalyticsLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setAnalyticsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [tab, selectedProfile, analyticsGroupBy]);
 
   useEffect(() => {
     Promise.all([getProfiles(), getVersion()]).then(([p, v]) => {
@@ -558,6 +588,19 @@ function DashboardContent() {
               {projects.length}
             </Badge>
             {tab === "projects" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
+            )}
+          </button>
+          <button
+            onClick={() => setTab("analytics")}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${
+              tab === "analytics"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Analytics
+            {tab === "analytics" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
             )}
           </button>
@@ -974,6 +1017,210 @@ function DashboardContent() {
                   Next
                 </Button>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {tab === "analytics" && (
+          <div className="space-y-6">
+            {analyticsLoading || !analyticsData ? (
+              <div className="flex items-center justify-center py-20 text-muted-foreground gap-3">
+                <div className="size-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                Loading analytics...
+              </div>
+            ) : (
+              <>
+                {/* Time controls */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground mr-1">Group by:</span>
+                  {(["day", "week"] as const).map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setAnalyticsGroupByParam(g)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        analyticsGroupBy === g
+                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                          : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
+                      }`}
+                    >
+                      {g.charAt(0).toUpperCase() + g.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Summary stats */}
+                {(() => {
+                  const totalCostPeriod = analyticsData.buckets.reduce((s, b) => s + b.costUsd, 0);
+                  const totalTokens = analyticsData.buckets.reduce((s, b) => s + b.tokenCount, 0);
+                  const totalSessions = analyticsData.buckets.reduce((s, b) => s + b.sessionCount, 0);
+                  const avgDailyCost = analyticsData.buckets.length > 0 ? totalCostPeriod / analyticsData.buckets.length : 0;
+                  return (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">Period Cost</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">${totalCostPeriod.toFixed(2)}</div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">Total Tokens</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">{formatTokens(totalTokens)}</div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">Total Sessions</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">{totalSessions}</div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">Avg Daily Cost</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">${avgDailyCost.toFixed(2)}</div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  );
+                })()}
+
+                {/* Total usage over time */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold">Total Usage Over Time</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={analyticsData.buckets}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                          <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                          <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
+                            labelStyle={{ color: "#a1a1aa" }}
+                            labelFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                            formatter={(value, name) => {
+                              const v = Number(value);
+                              if (name === "costUsd") return [`$${v.toFixed(2)}`, "Cost"];
+                              if (name === "tokenCount") return [formatTokens(v), "Tokens"];
+                              if (name === "sessionCount") return [v, "Sessions"];
+                              return [v, String(name)];
+                            }}
+                          />
+                          <Area type="monotone" dataKey="costUsd" stroke="#10b981" fill="#10b981" fillOpacity={0.3} strokeWidth={2} />
+                          <Area type="monotone" dataKey="tokenCount" stroke="transparent" fill="transparent" />
+                          <Area type="monotone" dataKey="sessionCount" stroke="transparent" fill="transparent" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Usage by Agent */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold">Usage by Agent</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {(() => {
+                          const agentChartColors: Record<string, string> = {
+                            ofek: "#3b82f6",
+                            anas: "#a855f7",
+                            dor: "#14b8a6",
+                          };
+                          const defaultColors = ["#6366f1", "#ec4899", "#f59e0b", "#84cc16", "#06b6d4"];
+                          const dates = analyticsData.buckets.map((b) => b.date);
+                          const merged = dates.map((date) => {
+                            const row: Record<string, string | number> = { date };
+                            for (const agent of analyticsData.byAgent) {
+                              const bucket = agent.buckets.find((b) => b.date === date);
+                              row[agent.agentId] = bucket?.costUsd ?? 0;
+                            }
+                            return row;
+                          });
+                          return (
+                            <AreaChart data={merged}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                              <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                              <Tooltip
+                                contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
+                                labelStyle={{ color: "#a1a1aa" }}
+                                labelFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                                formatter={(value, name) => [`$${Number(value).toFixed(2)}`, String(name)]}
+                              />
+                              <Legend wrapperStyle={{ color: "#a1a1aa", fontSize: 12 }} />
+                              {analyticsData.byAgent.map((agent, i) => {
+                                const color = agentChartColors[agent.agentId] || defaultColors[i % defaultColors.length];
+                                return (
+                                  <Area key={agent.agentId} type="monotone" dataKey={agent.agentId} stackId="1" stroke={color} fill={color} fillOpacity={0.3} strokeWidth={2} />
+                                );
+                              })}
+                            </AreaChart>
+                          );
+                        })()}
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Usage by Project */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold">Usage by Project</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {(() => {
+                          const projectColors = ["#f59e0b", "#f97316", "#fb7185", "#e879f9", "#a78bfa"];
+                          const dates = analyticsData.buckets.map((b) => b.date);
+                          const merged = dates.map((date) => {
+                            const row: Record<string, string | number> = { date };
+                            for (const proj of analyticsData.byProject) {
+                              const bucket = proj.buckets.find((b) => b.date === date);
+                              row[proj.name] = bucket?.costUsd ?? 0;
+                            }
+                            return row;
+                          });
+                          return (
+                            <AreaChart data={merged}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                              <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                              <Tooltip
+                                contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
+                                labelStyle={{ color: "#a1a1aa" }}
+                                labelFormatter={(d) => new Date(String(d)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                                formatter={(value, name) => [`$${Number(value).toFixed(2)}`, String(name)]}
+                              />
+                              <Legend wrapperStyle={{ color: "#a1a1aa", fontSize: 12 }} />
+                              {analyticsData.byProject.map((proj, i) => {
+                                const color = projectColors[i % projectColors.length];
+                                return (
+                                  <Area key={proj.projectId} type="monotone" dataKey={proj.name} stackId="1" stroke={color} fill={color} fillOpacity={0.3} strokeWidth={2} />
+                                );
+                              })}
+                            </AreaChart>
+                          );
+                        })()}
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
             )}
           </div>
         )}

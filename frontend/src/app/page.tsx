@@ -108,10 +108,10 @@ const features = [
 const providers = [
   { name: 'OpenClaw', icon: '🦞', status: 'supported' as const },
   { name: 'NanoClaw', icon: <img src="/providers/nanoclaw.webp" alt="NanoClaw" className="size-7 rounded" />, status: 'supported' as const },
-  { name: 'LangChain', icon: '🔗', status: 'coming' as const },
-  { name: 'AutoGPT', icon: '🤖', status: 'coming' as const },
-  { name: 'CrewAI', icon: '👥', status: 'coming' as const },
-  { name: 'Custom Agents', icon: '⚡', status: 'coming' as const },
+  { name: 'ZeroClaw', icon: '⚡', status: 'coming' as const },
+  { name: 'TrustClaw', icon: '🔒', status: 'coming' as const },
+  { name: 'Nanobot', icon: '🤖', status: 'coming' as const },
+  { name: 'PicoClaw', icon: '🔬', status: 'coming' as const },
 ];
 
 const cliCommands = [

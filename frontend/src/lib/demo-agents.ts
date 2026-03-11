@@ -98,7 +98,7 @@ export const DEMO_AGENTS: DemoAgent[] = [
     name: "slack-responder",
     host: "prod-us-west-2",
     status: "running",
-    spend: { today: 16.89, mtd: 86.40, allTime: 271.00 },
+    spend: { today: 16.89, mtd: 86.40, allTime: 271.57 },
     tokens: { today: 445_000, mtd: 2_160_000, allTime: 6_775_000 },
     errorCount: 2,
     lastHeartbeatMinutesAgo: 0.1,
@@ -125,7 +125,7 @@ export const DEMO_PROJECTS = [
   { id: "proj-3", name: "Sales Pipeline Automation", cost: 285.00 },
   { id: "proj-4", name: "Code Review Assistant", cost: 320.00 },
   { id: "proj-5", name: "Documentation Generator", cost: 380.00 },
-  { id: "proj-6", name: "Slack Integration", cost: 215.00 },
+  { id: "proj-6", name: "Slack Integration", cost: 215.57 },
 ].map(p => ({ ...p, pct: p.cost / DEMO_TOTALS.allTime }));
 
 // Model distribution (claude-sonnet: 65%, haiku: 25%, gpt-4o: 10%)

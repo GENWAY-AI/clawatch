@@ -4,6 +4,7 @@ node_modules
 *.md
 video/
 cli/
+!cli/package.json
 .env*
 *.log
 .DS_Store

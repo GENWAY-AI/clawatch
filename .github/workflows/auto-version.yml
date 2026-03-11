@@ -58,3 +58,18 @@ jobs:
         run: |
           git tag "v${{ steps.version.outputs.new }}"
           git push origin "v${{ steps.version.outputs.new }}"
+
+      - name: Setup Node.js for npm publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Build and publish to npm
+        run: |
+          cd cli
+          npm ci
+          npm run build
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,5 +1,6 @@
 import { Agent, Alert, AlertDetails, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile, AnalyticsData, SpendData, CostLimits } from "./types";
 import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails, mockAlertDetails } from "./mock-data";
+import { DEMO_AGENTS, DEMO_TOTALS } from "./demo-agents";
 
 // API_BASE: In the npm CLI, both frontend and API run on different ports.
 // The frontend server proxies /api/* to the backend, so we use relative URLs.
@@ -284,43 +285,63 @@ export async function removeSessionProject(sessionId: string, projectId: string)
   });
 }
 
+// Analytics mock — all derived from DEMO_TOTALS, no Math.random()
 const mockAnalytics: AnalyticsData = (() => {
   const dates = Array.from({ length: 14 }, (_, i) => {
     const d = new Date("2026-02-24");
     d.setDate(d.getDate() + i);
     return d.toISOString().slice(0, 10);
   });
-  const buckets = dates.map((date) => ({
-    date,
-    costUsd: +(5 + Math.random() * 15).toFixed(2),
-    tokenCount: Math.floor(1_000_000 + Math.random() * 4_000_000),
-    sessionCount: Math.floor(3 + Math.random() * 10),
-  }));
-  const agentIds = ["code-reviewer", "deploy-bot", "data-pipeline", "customer-support", "doc-generator", "slack-responder"];
-  const byAgent = agentIds.map((agentId) => ({
-    agentId,
-    buckets: dates.map((date) => ({
+
+  // Fixed daily weights — deterministic, sums to ~1.0
+  const w = [0.06, 0.07, 0.065, 0.08, 0.072, 0.068, 0.075, 0.073, 0.071, 0.082, 0.069, 0.076, 0.074, 0.065];
+  const wTotal = w.reduce((s, v) => s + v, 0);
+
+  // Total buckets — each day is a fraction of allTime
+  const buckets = dates.map((date, i) => {
+    const pct = w[i] / wTotal;
+    return {
       date,
-      costUsd: +(1 + Math.random() * 6).toFixed(2),
-      tokenCount: Math.floor(300_000 + Math.random() * 1_500_000),
-      sessionCount: Math.floor(1 + Math.random() * 4),
-    })),
+      costUsd: +(DEMO_TOTALS.allTime * pct).toFixed(2),
+      tokenCount: Math.floor(DEMO_TOTALS.tokens.allTime * pct),
+      sessionCount: 3 + (i % 5),
+    };
+  });
+
+  // Per-agent — each agent's allTime distributed across days
+  const byAgent = DEMO_AGENTS.filter(a => a.spend.allTime > 50).map((agent) => ({
+    agentId: agent.name,
+    buckets: dates.map((date, i) => {
+      const pct = w[i] / wTotal;
+      return {
+        date,
+        costUsd: +(agent.spend.allTime * pct).toFixed(2),
+        tokenCount: Math.floor(agent.tokens.allTime * pct),
+        sessionCount: 1 + (i % 3),
+      };
+    }),
   }));
-  const projectNames = [
-    { projectId: "proj-1", name: "ClaWatch" },
-    { projectId: "proj-2", name: "Auth Service" },
-    { projectId: "proj-3", name: "Mobile App" },
+
+  // Per-project — 45/32/23% split of allTime across days
+  const projSplits = [
+    { projectId: "proj-1", name: "ClaWatch", pct: 0.45 },
+    { projectId: "proj-2", name: "Auth Service", pct: 0.32 },
+    { projectId: "proj-3", name: "Mobile App", pct: 0.23 },
   ];
-  const byProject = projectNames.map(({ projectId, name }) => ({
+  const byProject = projSplits.map(({ projectId, name, pct }) => ({
     projectId,
     name,
-    buckets: dates.map((date) => ({
-      date,
-      costUsd: +(1 + Math.random() * 5).toFixed(2),
-      tokenCount: Math.floor(200_000 + Math.random() * 1_200_000),
-      sessionCount: Math.floor(1 + Math.random() * 3),
-    })),
+    buckets: dates.map((date, i) => {
+      const dayPct = w[i] / wTotal;
+      return {
+        date,
+        costUsd: +(DEMO_TOTALS.allTime * pct * dayPct).toFixed(2),
+        tokenCount: Math.floor(DEMO_TOTALS.tokens.allTime * pct * dayPct),
+        sessionCount: 1 + (i % 3),
+      };
+    }),
   }));
+
   return { buckets, byAgent, byProject };
 })();
 

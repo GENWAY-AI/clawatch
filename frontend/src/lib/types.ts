@@ -226,6 +226,7 @@ export interface AnalyticsData {
 export interface SpendData {
   today: number;
   mtd: number;
+  allTime: number;
   byAgent: Record<string, { today: number; mtd: number }>;
   limits: CostLimits;
   usagePercent: number | null;

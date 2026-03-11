@@ -1048,6 +1048,9 @@ router.get("/spend", async (req: Request, res: Response) => {
     const mtdSessions = sessions.filter((s) => s.startedAt.slice(0, 7) === monthStr);
     const mtdSpend = mtdSessions.reduce((sum, s) => sum + s.costUsd, 0);
 
+    // All-time spend
+    const allTimeSpend = sessions.reduce((sum, s) => sum + s.costUsd, 0);
+
     // Per-agent breakdown for today and MTD
     const byAgent: Record<string, { today: number; mtd: number }> = {};
     for (const s of sessions) {
@@ -1070,6 +1073,7 @@ router.get("/spend", async (req: Request, res: Response) => {
     res.json({
       today: +todaySpend.toFixed(2),
       mtd: +mtdSpend.toFixed(2),
+      allTime: +allTimeSpend.toFixed(2),
       byAgent,
       limits,
       usagePercent: usagePercent !== null ? +usagePercent.toFixed(1) : null,

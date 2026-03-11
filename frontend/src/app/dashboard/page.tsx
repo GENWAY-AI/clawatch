@@ -782,18 +782,13 @@ function DashboardContent() {
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Agents</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Agents</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{totalAgentCount}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Running</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-emerald-400">{runningCount}</div>
+              <div className="text-sm text-muted-foreground mt-1">
+                <span className={runningCount > 0 ? "text-emerald-400" : ""}>{runningCount} running</span>
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -872,6 +867,24 @@ function DashboardContent() {
               ) : spendData && Object.keys(spendData.limits.agentLimits).length > 0 ? (
                 <div className="mt-2 text-[11px] text-muted-foreground/60">Per-agent limits active</div>
               ) : null}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Spend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">${totalCost.toFixed(2)}</div>
+              <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Spend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">${spendData?.allTime.toFixed(2) ?? "—"}</div>
+              <div className="text-sm text-muted-foreground mt-1">All time</div>
             </CardContent>
           </Card>
           <Card

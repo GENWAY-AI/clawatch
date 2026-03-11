@@ -1,5 +1,7 @@
 // ClaWatch dashboard server: Next.js standalone + API reverse proxy
 // This replaces the default server.js to proxy /api/* to the backend
+// Must set production before any require — standalone builds only ship production React
+process.env.NODE_ENV = "production";
 const http = require("http");
 const path = require("path");
 
@@ -7,26 +9,7 @@ const PORT = parseInt(process.env.PORT || "3456", 10);
 const BACKEND_PORT = process.env.BACKEND_PORT || "3001";
 const HOSTNAME = process.env.HOSTNAME || "0.0.0.0";
 
-// Load Next.js request handler
-process.env.PORT = String(PORT);
-process.env.HOSTNAME = HOSTNAME;
-const nextHandler = require("./server.js");
-
-// Wait a tick for Next.js to initialize, then wrap with proxy
-setImmediate(() => {
-  // Next.js standalone creates its own server on PORT.
-  // We need to intercept before that. Instead, let's create a proxy
-  // that runs on PORT and forwards to Next.js on an internal port.
-});
-
-// Actually, simpler: just start the default server.js which handles Next.js,
-// but we need to patch the request handling to proxy /api/*.
-// Since server.js creates its own http server, we can't easily wrap it.
-//
-// Simplest reliable approach: use http-proxy-like manual proxying
-// by replacing this file as the entry point.
-
-// Dynamically load the Next.js app
+// Load Next.js app directly (don't require server.js — it starts its own listener)
 const NextServer = require("next/dist/server/next-server").default;
 const conf = require("./.next/required-server-files.json");
 

@@ -264,8 +264,10 @@ program
     let frontendProcess: ChildProcess | null = null;
 
     if (frontendDir) {
-      const proxyServer = path.join(frontendDir, 'server-with-proxy.js');
-      const serverJs = fs.existsSync(proxyServer) ? proxyServer : path.join(frontendDir, 'server.js');
+      // Use default standalone server.js — it handles static files AND API proxying
+      // (via next.config.ts rewrites). server-with-proxy.js is no longer needed.
+      const standaloneServer = path.join(frontendDir, '.next', 'standalone', 'server.js');
+      const serverJs = fs.existsSync(standaloneServer) ? standaloneServer : path.join(frontendDir, 'server.js');
       if (fs.existsSync(serverJs)) {
         console.log(chalk.blue('Starting dashboard...'));
         frontendProcess = spawn('node', ['--no-deprecation', serverJs], {

@@ -11,7 +11,7 @@ jobs:
   version-bump:
     runs-on: ubuntu-latest
     # Skip if the commit is from this workflow (prevent infinite loop)
-    if: "!contains(github.event.head_commit.message, 'chore: bump version to')"
+    if: "!contains(github.event.head_commit.message, 'chore(release): bump version to')"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,7 +51,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add cli/package.json cli/package-lock.json
-          git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+          git commit -m "chore(release): bump version to ${{ steps.version.outputs.new }}"
           git push
 
       - name: Create git tag
@@ -73,3 +73,11 @@ jobs:
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Deploy to Railway
+        if: env.RAILWAY_TOKEN != ''
+        run: |
+          npm i -g @railway/cli
+          railway up --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}

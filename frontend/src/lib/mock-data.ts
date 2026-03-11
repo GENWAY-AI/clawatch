@@ -321,7 +321,7 @@ export const mockProjects: Project[] = DEMO_PROJECTS.map((p, i) => ({
   ][i],
   createdAt: hoursAgo(48 + i * 24),
   updatedAt: minutesAgo(5 + i * 15),
-  sessionCount: 3 + i,
+  sessionCount: 3,
   totalCostUsd: +p.cost.toFixed(2),
 }));
 
@@ -401,9 +401,7 @@ export const mockProjectDetails: Record<string, ProjectDetail> = Object.fromEntr
   DEMO_PROJECTS.map((proj, pi) => {
     const cost = +proj.cost.toFixed(2);
     const tokens = Math.floor(DEMO_TOTALS.tokens.allTime * proj.pct);
-    const sessionCount = 3 + pi;
     const totalMessages = 40 + pi * 20;
-    const splits = sessionSplits[pi];
     const projAgents = [
       DEMO_AGENTS[pi % 8],
       DEMO_AGENTS[(pi + 1) % 8],
@@ -411,26 +409,25 @@ export const mockProjectDetails: Record<string, ProjectDetail> = Object.fromEntr
     ];
     const agentPcts = [0.50, 0.30, 0.20];
 
-    // Build sessions that sum exactly to project cost/messages
-    const projSessions: Session[] = splits.map((pct, si) => {
-      const isLast = si === splits.length - 1;
-      const prevCost = isLast ? splits.slice(0, si).reduce((s, p) => s + +(cost * p).toFixed(2), 0) : 0;
-      const sessionCost = isLast ? +(cost - prevCost).toFixed(2) : +(cost * pct).toFixed(2);
-      const prevMsgs = isLast ? splits.slice(0, si).reduce((s, p) => s + Math.round(totalMessages * p), 0) : 0;
-      const sessionMsgs = isLast ? totalMessages - prevMsgs : Math.round(totalMessages * pct);
-      const agent = projAgents[si % projAgents.length];
+    // 1 session per agent — costs match agent participation exactly
+    const projSessions: Session[] = projAgents.map((agent, ai) => {
+      const isLast = ai === projAgents.length - 1;
+      const prevCost = isLast ? agentPcts.slice(0, ai).reduce((s, p) => s + +(cost * p).toFixed(2), 0) : 0;
+      const sessionCost = isLast ? +(cost - prevCost).toFixed(2) : +(cost * agentPcts[ai]).toFixed(2);
+      const prevMsgs = isLast ? agentPcts.slice(0, ai).reduce((s, p) => s + Math.round(totalMessages * p), 0) : 0;
+      const sessionMsgs = isLast ? totalMessages - prevMsgs : Math.round(totalMessages * agentPcts[ai]);
       return {
-        id: `proj-${pi + 1}-session-${si + 1}`,
+        id: `proj-${pi + 1}-session-${ai + 1}`,
         agentId: agent.id,
-        title: sessionTitles[(pi * 3 + si) % sessionTitles.length],
-        status: si === 0 ? "active" : si === 1 ? "idle" : "completed",
+        title: sessionTitles[(pi * 3 + ai) % sessionTitles.length],
+        status: ai === 0 ? "active" : ai === 1 ? "idle" : "completed",
         costUsd: sessionCost,
-        tokenCount: Math.floor(tokens * pct),
+        tokenCount: Math.floor(tokens * agentPcts[ai]),
         messageCount: sessionMsgs,
-        model: si % 3 === 2 ? "claude-haiku-4-20250506" : "claude-sonnet-4-20250514",
-        startedAt: hoursAgo(si * 4 + 1),
-        lastActivityAt: minutesAgo(si * 15 + 2),
-        duration: 1800 + si * 1200,
+        model: ai % 3 === 2 ? "claude-haiku-4-20250506" : "claude-sonnet-4-20250514",
+        startedAt: hoursAgo(ai * 4 + 1),
+        lastActivityAt: minutesAgo(ai * 15 + 2),
+        duration: 1800 + ai * 1200,
         projects: [{ id: proj.id, name: proj.name }],
       };
     });
@@ -443,7 +440,7 @@ export const mockProjectDetails: Record<string, ProjectDetail> = Object.fromEntr
         totalCostUsd: cost,
         totalTokens: tokens,
         totalMessages: totalMessages,
-        sessionCount: sessionCount,
+        sessionCount: projAgents.length,
         dateRange: { from: hoursAgo(48 + pi * 24), to: minutesAgo(5 + pi * 15) },
       },
       agentBreakdown: projAgents.map((a, ai) => ({

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile, AnalyticsData, SpendData, CostLimits } from "@/lib/types";
-import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics, getSpend, setCostLimits } from "@/lib/api";
+import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics, getSpend, setCostLimits, isUsingMockData } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 
@@ -68,14 +68,14 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-const statusConfig: Record<AgentStatus, { color: string; dot: string; label: string }> = {
-  running: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Running" },
-  active: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Active" },
-  idle: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Idle" },
-  paused: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400", label: "Paused" },
-  stopped: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Stopped" },
-  error: { color: "bg-red-500/10 text-red-400 border-red-500/20", dot: "bg-red-400", label: "Error" },
-  stuck: { color: "bg-orange-500/10 text-orange-400 border-orange-500/20", dot: "bg-orange-400 animate-pulse", label: "Stuck" },
+const statusConfig: Record<AgentStatus, { color: string; dot: string; label: string; tooltip: string }> = {
+  running: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Running", tooltip: "Agent is actively processing tasks. Heartbeat received within the last few minutes." },
+  active: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Active", tooltip: "Agent is online and responsive but not currently executing a task." },
+  idle: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Idle", tooltip: "Agent has no active sessions. Last heartbeat was more than 5 minutes ago." },
+  paused: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400", label: "Paused", tooltip: "Agent was manually paused. It will not process new tasks until resumed." },
+  stopped: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Stopped", tooltip: "Agent process is not running. Restart it to resume monitoring." },
+  error: { color: "bg-red-500/10 text-red-400 border-red-500/20", dot: "bg-red-400", label: "Error", tooltip: "Agent encountered an error. Check alerts for details." },
+  stuck: { color: "bg-orange-500/10 text-orange-400 border-orange-500/20", dot: "bg-orange-400 animate-pulse", label: "Stuck", tooltip: "Agent appears stuck — no heartbeat or progress for an extended period." },
 };
 
 const sessionStatusConfig: Record<SessionStatus, { color: string; dot: string; label: string }> = {
@@ -453,6 +453,7 @@ function DashboardContent() {
   const [hiddenAgentSeries, setHiddenAgentSeries] = useState<Set<string>>(new Set());
   const [hiddenProjectSeries, setHiddenProjectSeries] = useState<Set<string>>(new Set());
   const [spendData, setSpendData] = useState<SpendData | null>(null);
+  const [showingDemoData, setShowingDemoData] = useState(false);
   const [showCostSettings, setShowCostSettings] = useState(false);
 
   const selectedProfile = searchParams.get("profile") || "default";
@@ -586,7 +587,7 @@ function DashboardContent() {
         getAgents("all", prof),
         getAlerts({ limit: ALERTS_PER_PAGE, offset: alertOffset, severity: severityParam, profile: prof }),
         getAlerts({ profile: prof }),
-        getCosts(prof),
+        getCosts({ profile: prof }),
         getSessions({ status: sessStatus, sort: sessionSort, profile: prof, limit: SESSIONS_PER_PAGE, offset: sessionOffset }),
         getProjects(prof),
         getSpend(prof),
@@ -601,6 +602,7 @@ function DashboardContent() {
       setSessionsTotal(sessResult.total);
       setProjects(p);
       setSpendData(sp);
+      setShowingDemoData(isUsingMockData());
     } finally {
       setLoading(false);
     }
@@ -764,6 +766,17 @@ function DashboardContent() {
         </div>
       </nav>
 
+      {showingDemoData && (
+        <div className="max-w-7xl mx-auto px-6 pt-4">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <span className="text-amber-400 text-lg">⚠️</span>
+            <div>
+              <span className="text-amber-400 font-medium text-sm">Demo Mode</span>
+              <span className="text-amber-400/70 text-sm ml-2">Showing sample data — backend is unreachable or mock mode is enabled.</span>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Stats Overview */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -958,6 +971,13 @@ function DashboardContent() {
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
             )}
           </button>
+          <Link
+            href="/dashboard/costs"
+            className="px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative inline-flex items-center gap-1"
+          >
+            Costs
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
+          </Link>
         </div>
 
         {/* Agents Tab */}

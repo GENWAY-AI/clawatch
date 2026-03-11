@@ -9,6 +9,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
+// Track whether we're showing demo/mock data
+let _usingMockData = USE_MOCK;
+export function isUsingMockData(): boolean { return _usingMockData; }
+function markMockFallback() { _usingMockData = true; }
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -53,7 +58,7 @@ export async function getAgents(status?: string, profile?: string): Promise<Agen
     const data = await fetchJson<{ agents: Agent[] }>(`/api/agents${qs ? `?${qs}` : ""}`);
     return data.agents;
   } catch {
-    console.warn("API unreachable, falling back to mock data");
+    console.warn("API unreachable, falling back to mock data"); markMockFallback();
     return mockAgents;
   }
 }
@@ -84,7 +89,7 @@ export async function getAlerts(params?: {
     const query = qs.toString();
     return await fetchJson<AlertsResponse>(`/api/alerts${query ? `?${query}` : ""}`);
   } catch {
-    console.warn("API unreachable, falling back to mock data");
+    console.warn("API unreachable, falling back to mock data"); markMockFallback();
     return { alerts: mockAlerts, total: mockAlerts.length };
   }
 }
@@ -97,15 +102,24 @@ export async function acknowledgeAllAlerts(severity?: AlertSeverity): Promise<{ 
   );
 }
 
-export async function getCosts(profile?: string): Promise<CostData> {
+export async function getCosts(params?: { profile?: string; from?: string; to?: string }): Promise<CostData> {
   if (USE_MOCK) return mockCosts;
   try {
-    const qs = profile ? `?profile=${profile}` : "";
-    return await fetchJson<CostData>(`/api/costs${qs}`);
+    const qs = new URLSearchParams();
+    if (params?.profile) qs.set("profile", params.profile);
+    if (params?.from) qs.set("from", params.from);
+    if (params?.to) qs.set("to", params.to);
+    const query = qs.toString();
+    return await fetchJson<CostData>(`/api/costs${query ? `?${query}` : ""}`);
   } catch {
-    console.warn("API unreachable, falling back to mock data");
+    console.warn("API unreachable, falling back to mock data"); markMockFallback();
     return mockCosts;
   }
+}
+
+export function getCostsCSVUrl(profile?: string): string {
+  const qs = profile ? `?profile=${profile}` : "";
+  return `${API_BASE}/api/costs/export${qs}`;
 }
 
 export async function pauseAgent(id: string): Promise<void> {
@@ -132,7 +146,7 @@ export async function getAlertDetails(id: string): Promise<AlertDetails> {
   try {
     return await fetchJson<AlertDetails>(`/api/alerts/${id}/details`);
   } catch {
-    console.warn("API unreachable, falling back to mock data");
+    console.warn("API unreachable, falling back to mock data"); markMockFallback();
     const detail = mockAlertDetails[id];
     if (detail) return detail;
     throw new Error("Alert not found");
@@ -177,7 +191,7 @@ export async function getSessions(opts?: {
     const data = await fetchJson<{ sessions: Session[]; total: number }>(`/api/sessions${qs ? `?${qs}` : ""}`);
     return { sessions: data.sessions, total: data.total };
   } catch {
-    console.warn("API unreachable, falling back to mock data");
+    console.warn("API unreachable, falling back to mock data"); markMockFallback();
     return { sessions: mockSessions, total: mockSessions.length };
   }
 }
@@ -191,7 +205,7 @@ export async function getSession(id: string): Promise<SessionDetail> {
   try {
     return await fetchJson<SessionDetail>(`/api/sessions/${id}`);
   } catch {
-    console.warn("API unreachable, falling back to mock data");
+    console.warn("API unreachable, falling back to mock data"); markMockFallback();
     const detail = mockSessionDetails[id];
     if (detail) return detail;
     throw new Error("Session not found");
@@ -205,7 +219,7 @@ export async function getProjects(profile?: string): Promise<Project[]> {
     const data = await fetchJson<{ projects: Project[] }>(`/api/projects${qs}`);
     return data.projects;
   } catch {
-    console.warn("API unreachable, falling back to mock data");
+    console.warn("API unreachable, falling back to mock data"); markMockFallback();
     return mockProjects;
   }
 }
@@ -219,7 +233,7 @@ export async function getProject(id: string): Promise<ProjectDetail> {
   try {
     return await fetchJson<ProjectDetail>(`/api/projects/${id}`);
   } catch {
-    console.warn("API unreachable, falling back to mock data");
+    console.warn("API unreachable, falling back to mock data"); markMockFallback();
     const detail = mockProjectDetails[id];
     if (detail) return detail;
     throw new Error("Project not found");

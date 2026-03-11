@@ -1,4 +1,5 @@
 import { Agent, Alert, AlertDetails, AlertRelatedError, CostData, Session, SessionDetail, SessionMessage, Project, ProjectDetail, TimelineMessage } from "./types";
+import { DEMO_AGENTS, DEMO_TOTALS, DEMO_MODELS, DEMO_PROJECTS } from "./demo-agents";
 
 const now = new Date();
 const minutesAgo = (m: number) => new Date(now.getTime() - m * 60000).toISOString();
@@ -135,42 +136,46 @@ export const mockAlerts: Alert[] = [
   },
 ];
 
+// All costs derived from DEMO_TOTALS — single source of truth
 export const mockCosts: CostData = {
-  totalUsd: 39.65,
-  totalTokens: 4_500_000,
-  sessionCount: 12,
-  byAgent: mockAgents.map((a) => ({
+  totalUsd: +DEMO_TOTALS.allTime.toFixed(2),
+  totalTokens: DEMO_TOTALS.tokens.allTime,
+  sessionCount: 42,
+  byAgent: DEMO_AGENTS.map((a) => ({
     agentId: a.id,
     name: a.name,
-    costUsd: a.costUsd,
-    tokenCount: a.tokenCount,
+    costUsd: a.spend.allTime,
+    tokenCount: a.tokens.allTime,
   })),
-  byModel: [
-    { model: "claude-sonnet-4-20250514", costUsd: 22.1 },
-    { model: "claude-haiku-4-20250506", costUsd: 11.35 },
-    { model: "gpt-4o", costUsd: 6.2 },
-  ],
-  byProject: [
-    { projectId: "proj-1", name: "ClaWatch", costUsd: 18.5, tokenCount: 2_100_000, sessionCount: 5 },
-    { projectId: "proj-2", name: "Auth Service", costUsd: 12.35, tokenCount: 1_400_000, sessionCount: 4 },
-    { projectId: "proj-3", name: "Mobile App", costUsd: 8.8, tokenCount: 1_000_000, sessionCount: 3 },
-  ],
-  daily: Array.from({ length: 7 }, (_, i) => {
-    const d = new Date("2026-03-04");
-    d.setDate(d.getDate() + i);
-    return {
-      date: d.toISOString().slice(0, 10),
-      costUsd: +(3 + Math.random() * 8).toFixed(2),
-      tokenCount: Math.floor(400_000 + Math.random() * 800_000),
-      sessionCount: Math.floor(1 + Math.random() * 4),
-    };
-  }),
+  byModel: DEMO_MODELS.byModel,
+  byProject: DEMO_PROJECTS.map((p, i) => ({
+    projectId: p.id,
+    name: p.name,
+    costUsd: +p.cost.toFixed(2),
+    tokenCount: Math.floor(DEMO_TOTALS.tokens.allTime * p.pct),
+    sessionCount: 5 + i * 2,
+  })),
+  daily: (() => {
+    // Fixed percentages of MTD spend — no Math.random(), stable on every render
+    const pcts = [0.12, 0.15, 0.11, 0.17, 0.14, 0.16, 0.15];
+    const sess = [4, 6, 3, 7, 5, 6, 5];
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date("2026-03-04");
+      d.setDate(d.getDate() + i);
+      return {
+        date: d.toISOString().slice(0, 10),
+        costUsd: +(DEMO_TOTALS.mtd * pcts[i]).toFixed(2),
+        tokenCount: Math.floor(DEMO_TOTALS.tokens.mtd * pcts[i]),
+        sessionCount: sess[i],
+      };
+    });
+  })(),
 };
 
 export const mockSessions: Session[] = [
   {
     id: "session-1",
-    agentId: "ofek",
+    agentId: "agent-1",
     title: "Build ClaWatch dashboard with real-time alerts",
     status: "active",
     costUsd: 3.47,
@@ -184,7 +189,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: "session-2",
-    agentId: "anas",
+    agentId: "agent-2",
     title: "Fix authentication bug in user login flow",
     status: "completed",
     costUsd: 1.23,
@@ -198,7 +203,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: "session-3",
-    agentId: "dor",
+    agentId: "agent-3",
     title: "Review PR #47 — add retry logic to API calls",
     status: "idle",
     costUsd: 0.87,
@@ -211,7 +216,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: "session-4",
-    agentId: "ofek",
+    agentId: "agent-1",
     title: "Implement WebSocket event streaming for agent heartbeats",
     status: "active",
     costUsd: 5.12,
@@ -225,7 +230,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: "session-5",
-    agentId: "anas",
+    agentId: "agent-2",
     title: "Refactor database schema for multi-tenant support",
     status: "completed",
     costUsd: 2.89,
@@ -238,7 +243,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: "session-6",
-    agentId: "dor",
+    agentId: "agent-3",
     title: "Debug failing CI pipeline — Jest timeout errors",
     status: "idle",
     costUsd: 0.54,
@@ -251,7 +256,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: "session-7",
-    agentId: "ofek",
+    agentId: "agent-1",
     title: "Add Telegram bot notification integration",
     status: "completed",
     costUsd: 1.76,
@@ -264,7 +269,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: "session-8",
-    agentId: "anas",
+    agentId: "agent-2",
     title: "Write unit tests for cost calculation module",
     status: "active",
     costUsd: 0.92,
@@ -277,7 +282,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: "session-9",
-    agentId: "dor",
+    agentId: "agent-3",
     title: "Optimize SQL queries — reduce p95 latency from 800ms to 200ms",
     status: "completed",
     costUsd: 4.31,
@@ -290,7 +295,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: "session-10",
-    agentId: "ofek",
+    agentId: "agent-1",
     title: "Set up Docker Compose for local development environment",
     status: "idle",
     costUsd: 0.63,
@@ -303,26 +308,22 @@ export const mockSessions: Session[] = [
   },
 ];
 
-export const mockProjects: Project[] = [
-  {
-    id: "project-1",
-    name: "Building ClaWatch",
-    description: "Full-stack AI observability platform with real-time monitoring, session tracking, and cost analytics",
-    createdAt: hoursAgo(48),
-    updatedAt: minutesAgo(5),
-    sessionCount: 3,
-    totalCostUsd: 185.98,
-  },
-  {
-    id: "project-2",
-    name: "Bug Fixes Sprint",
-    description: "Critical bug fixes for authentication, database schema, and CI pipeline issues",
-    createdAt: hoursAgo(24),
-    updatedAt: minutesAgo(30),
-    sessionCount: 2,
-    totalCostUsd: 12.50,
-  },
-];
+export const mockProjects: Project[] = DEMO_PROJECTS.map((p, i) => ({
+  id: p.id,
+  name: p.name,
+  description: [
+    "Full-stack AI observability platform with real-time monitoring, session tracking, and cost analytics",
+    "Automated customer support with AI-powered ticket routing and response generation",
+    "Lead scoring, pipeline automation, and CRM integration powered by AI agents",
+    "Automated PR reviews with code quality analysis, security scanning, and style enforcement",
+    "AI-driven documentation generation from code, APIs, and architecture diagrams",
+    "Slack bot integration for team notifications, standup automation, and workflow triggers",
+  ][i],
+  createdAt: hoursAgo(48 + i * 24),
+  updatedAt: minutesAgo(5 + i * 15),
+  sessionCount: 3,
+  totalCostUsd: +p.cost.toFixed(2),
+}));
 
 function buildMockTimeline(): TimelineMessage[] {
   const messages: TimelineMessage[] = [];
@@ -333,107 +334,127 @@ function buildMockTimeline(): TimelineMessage[] {
   };
 
   // Interleaved timeline across 3 agents working on "Building ClaWatch"
-  m("session-1", "ofek", "user", 120, "Build the ClaWatch dashboard with real-time alerts and agent monitoring. Use Next.js 15 + shadcn/ui.");
-  m("session-1", "ofek", "assistant", 119, "I'll build the ClaWatch dashboard. Let me start by setting up the project structure and examining existing code.", { model: "claude-sonnet-4-20250514", costUsd: 0.04 });
-  m("session-3", "dor", "user", 118, "Review the initial project setup and suggest architectural improvements for the monitoring system.");
-  m("session-1", "ofek", "tool", 117, "src/\n  app/\n    dashboard/\n      page.tsx\n    layout.tsx\n  components/\n    ui/\n  lib/\n    types.ts\n    api.ts", { toolName: "read" });
-  m("session-3", "dor", "assistant", 116, "Looking at the project structure. I'll review the architecture and suggest improvements for scalability.", { model: "claude-haiku-4-20250506", costUsd: 0.01 });
-  m("session-1", "ofek", "assistant", 115, "Project structure looks good. I'll create the type definitions for agents, sessions, alerts, and cost data.", { model: "claude-sonnet-4-20250514", costUsd: 0.06 });
-  m("session-8", "anas", "user", 114, "Write comprehensive unit tests for the cost calculation module including edge cases.");
-  m("session-1", "ofek", "tool", 113, "File written: src/lib/types.ts (78 lines)", { toolName: "write" });
-  m("session-8", "anas", "assistant", 112, "I'll write thorough unit tests for cost calculations. Let me first examine the module.", { model: "claude-haiku-4-20250506", costUsd: 0.02 });
-  m("session-3", "dor", "tool", 111, 'export interface Agent {\n  id: string;\n  name: string;\n  status: AgentStatus;\n  ...', { toolName: "read" });
-  m("session-3", "dor", "assistant", 110, "The type definitions look solid. I'd suggest adding a `duration` field to Session for better analytics. Also, the cost tracking should support per-model breakdown.", { model: "claude-haiku-4-20250506", costUsd: 0.02 });
-  m("session-1", "ofek", "assistant", 108, "Good point from the review. I'll add duration tracking and per-model cost breakdown. Now creating the mock data layer.", { model: "claude-sonnet-4-20250514", costUsd: 0.05 });
-  m("session-8", "anas", "tool", 107, "export function calculateCost(tokens: number, model: string): number { ... }", { toolName: "read" });
-  m("session-1", "ofek", "tool", 105, "File written: src/lib/mock-data.ts (280 lines)", { toolName: "write" });
-  m("session-8", "anas", "assistant", 104, "Found the cost module. I'll test standard pricing, cache discount calculations, multi-model sessions, and zero-token edge cases.", { model: "claude-haiku-4-20250506", costUsd: 0.03 });
-  m("session-1", "ofek", "system", 103, "Context window: 45% utilized (90K/200K tokens)");
-  m("session-8", "anas", "tool", 102, "File written: src/__tests__/cost-calculation.test.ts (156 lines)", { toolName: "write" });
-  m("session-1", "ofek", "assistant", 100, "Mock data created. Now building the dashboard page with agent cards, alert banners, and cost overview.", { model: "claude-sonnet-4-20250514", costUsd: 0.12 });
-  m("session-3", "dor", "user", 98, "Can you also review the API layer and check for error handling gaps?");
-  m("session-1", "ofek", "tool", 95, "File written: src/app/dashboard/page.tsx (320 lines)", { toolName: "write" });
-  m("session-8", "anas", "assistant", 94, "All 12 test cases pass. Found one edge case where negative token counts could cause issues — adding a guard.", { model: "claude-haiku-4-20250506", costUsd: 0.02 });
-  m("session-3", "dor", "assistant", 92, "Reviewing API layer. The fetchJson wrapper needs better error handling — currently swallows network errors. I'll suggest adding retry logic and timeout handling.", { model: "claude-haiku-4-20250506", costUsd: 0.03 });
-  m("session-8", "anas", "tool", 90, "$ npm test -- --watchAll=false\n\nTest Suites: 1 passed, 1 total\nTests: 14 passed, 14 total\nTime: 2.834s", { toolName: "exec" });
-  m("session-1", "ofek", "assistant", 88, "Dashboard page done. Adding real-time polling with 5-second intervals and the tabbed interface for Agents/Sessions views.", { model: "claude-sonnet-4-20250514", costUsd: 0.08 });
-  m("session-1", "ofek", "tool", 85, "$ npm run build\n\n ✓ Compiled successfully\n ✓ Generating static pages (5/5)\n\nBuild completed in 8.2s", { toolName: "exec" });
-  m("session-3", "dor", "assistant", 83, "Here's my review summary:\n1. Add retry logic to fetchJson (3 retries with exponential backoff)\n2. Add request timeout (30s default)\n3. The mock fallback pattern is good but should log errors to a monitoring service\n4. Consider adding request deduplication for concurrent calls", { model: "claude-haiku-4-20250506", costUsd: 0.04 });
-  m("session-1", "ofek", "user", 80, "Add session detail view with message timeline, cost breakdown by model, and token analysis.");
-  m("session-1", "ofek", "assistant", 78, "I'll build the session detail page with a full message timeline. Each message type will have distinct visual treatment.", { model: "claude-sonnet-4-20250514", costUsd: 0.09 });
-  m("session-1", "ofek", "tool", 75, "File written: src/app/dashboard/sessions/[id]/page.tsx (340 lines)", { toolName: "write" });
-  m("session-8", "anas", "assistant", 72, "All tests passing. Adding integration tests for the API mock fallback pattern now.", { model: "claude-haiku-4-20250506", costUsd: 0.02 });
-  m("session-1", "ofek", "assistant", 70, "Session detail page complete with:\n- Message timeline with user/assistant/tool/system styling\n- Cost breakdown by model with progress bars\n- Token breakdown (input/output/cache read/cache write)\n- Collapsible tool outputs", { model: "claude-sonnet-4-20250514", costUsd: 0.06 });
-  m("session-1", "ofek", "system", 68, "Context window: 72% utilized (144K/200K tokens)");
-  m("session-1", "ofek", "tool", 65, "$ npm run build\n\n ✓ Compiled successfully\n ✓ Generating static pages (7/7)\n\nBuild completed in 9.1s", { toolName: "exec" });
-  m("session-1", "ofek", "assistant", 60, "Build passes. The ClaWatch dashboard is fully functional with real-time monitoring, session tracking, and cost analytics.", { model: "claude-sonnet-4-20250514", costUsd: 0.04 });
+  m("session-1", "agent-1", "user", 120, "Build the ClaWatch dashboard with real-time alerts and agent monitoring. Use Next.js 15 + shadcn/ui.");
+  m("session-1", "agent-1", "assistant", 119, "I'll build the ClaWatch dashboard. Let me start by setting up the project structure and examining existing code.", { model: "claude-sonnet-4-20250514", costUsd: 0.04 });
+  m("session-3", "agent-3", "user", 118, "Review the initial project setup and suggest architectural improvements for the monitoring system.");
+  m("session-1", "agent-1", "tool", 117, "src/\n  app/\n    dashboard/\n      page.tsx\n    layout.tsx\n  components/\n    ui/\n  lib/\n    types.ts\n    api.ts", { toolName: "read" });
+  m("session-3", "agent-3", "assistant", 116, "Looking at the project structure. I'll review the architecture and suggest improvements for scalability.", { model: "claude-haiku-4-20250506", costUsd: 0.01 });
+  m("session-1", "agent-1", "assistant", 115, "Project structure looks good. I'll create the type definitions for agents, sessions, alerts, and cost data.", { model: "claude-sonnet-4-20250514", costUsd: 0.06 });
+  m("session-8", "agent-2", "user", 114, "Write comprehensive unit tests for the cost calculation module including edge cases.");
+  m("session-1", "agent-1", "tool", 113, "File written: src/lib/types.ts (78 lines)", { toolName: "write" });
+  m("session-8", "agent-2", "assistant", 112, "I'll write thorough unit tests for cost calculations. Let me first examine the module.", { model: "claude-haiku-4-20250506", costUsd: 0.02 });
+  m("session-3", "agent-3", "tool", 111, 'export interface Agent {\n  id: string;\n  name: string;\n  status: AgentStatus;\n  ...', { toolName: "read" });
+  m("session-3", "agent-3", "assistant", 110, "The type definitions look solid. I'd suggest adding a `duration` field to Session for better analytics. Also, the cost tracking should support per-model breakdown.", { model: "claude-haiku-4-20250506", costUsd: 0.02 });
+  m("session-1", "agent-1", "assistant", 108, "Good point from the review. I'll add duration tracking and per-model cost breakdown. Now creating the mock data layer.", { model: "claude-sonnet-4-20250514", costUsd: 0.05 });
+  m("session-8", "agent-2", "tool", 107, "export function calculateCost(tokens: number, model: string): number { ... }", { toolName: "read" });
+  m("session-1", "agent-1", "tool", 105, "File written: src/lib/mock-data.ts (280 lines)", { toolName: "write" });
+  m("session-8", "agent-2", "assistant", 104, "Found the cost module. I'll test standard pricing, cache discount calculations, multi-model sessions, and zero-token edge cases.", { model: "claude-haiku-4-20250506", costUsd: 0.03 });
+  m("session-1", "agent-1", "system", 103, "Context window: 45% utilized (90K/200K tokens)");
+  m("session-8", "agent-2", "tool", 102, "File written: src/__tests__/cost-calculation.test.ts (156 lines)", { toolName: "write" });
+  m("session-1", "agent-1", "assistant", 100, "Mock data created. Now building the dashboard page with agent cards, alert banners, and cost overview.", { model: "claude-sonnet-4-20250514", costUsd: 0.12 });
+  m("session-3", "agent-3", "user", 98, "Can you also review the API layer and check for error handling gaps?");
+  m("session-1", "agent-1", "tool", 95, "File written: src/app/dashboard/page.tsx (320 lines)", { toolName: "write" });
+  m("session-8", "agent-2", "assistant", 94, "All 12 test cases pass. Found one edge case where negative token counts could cause issues — adding a guard.", { model: "claude-haiku-4-20250506", costUsd: 0.02 });
+  m("session-3", "agent-3", "assistant", 92, "Reviewing API layer. The fetchJson wrapper needs better error handling — currently swallows network errors. I'll suggest adding retry logic and timeout handling.", { model: "claude-haiku-4-20250506", costUsd: 0.03 });
+  m("session-8", "agent-2", "tool", 90, "$ npm test -- --watchAll=false\n\nTest Suites: 1 passed, 1 total\nTests: 14 passed, 14 total\nTime: 2.834s", { toolName: "exec" });
+  m("session-1", "agent-1", "assistant", 88, "Dashboard page done. Adding real-time polling with 5-second intervals and the tabbed interface for Agents/Sessions views.", { model: "claude-sonnet-4-20250514", costUsd: 0.08 });
+  m("session-1", "agent-1", "tool", 85, "$ npm run build\n\n ✓ Compiled successfully\n ✓ Generating static pages (5/5)\n\nBuild completed in 8.2s", { toolName: "exec" });
+  m("session-3", "agent-3", "assistant", 83, "Here's my review summary:\n1. Add retry logic to fetchJson (3 retries with exponential backoff)\n2. Add request timeout (30s default)\n3. The mock fallback pattern is good but should log errors to a monitoring service\n4. Consider adding request deduplication for concurrent calls", { model: "claude-haiku-4-20250506", costUsd: 0.04 });
+  m("session-1", "agent-1", "user", 80, "Add session detail view with message timeline, cost breakdown by model, and token analysis.");
+  m("session-1", "agent-1", "assistant", 78, "I'll build the session detail page with a full message timeline. Each message type will have distinct visual treatment.", { model: "claude-sonnet-4-20250514", costUsd: 0.09 });
+  m("session-1", "agent-1", "tool", 75, "File written: src/app/dashboard/sessions/[id]/page.tsx (340 lines)", { toolName: "write" });
+  m("session-8", "agent-2", "assistant", 72, "All tests passing. Adding integration tests for the API mock fallback pattern now.", { model: "claude-haiku-4-20250506", costUsd: 0.02 });
+  m("session-1", "agent-1", "assistant", 70, "Session detail page complete with:\n- Message timeline with user/assistant/tool/system styling\n- Cost breakdown by model with progress bars\n- Token breakdown (input/output/cache read/cache write)\n- Collapsible tool outputs", { model: "claude-sonnet-4-20250514", costUsd: 0.06 });
+  m("session-1", "agent-1", "system", 68, "Context window: 72% utilized (144K/200K tokens)");
+  m("session-1", "agent-1", "tool", 65, "$ npm run build\n\n ✓ Compiled successfully\n ✓ Generating static pages (7/7)\n\nBuild completed in 9.1s", { toolName: "exec" });
+  m("session-1", "agent-1", "assistant", 60, "Build passes. The ClaWatch dashboard is fully functional with real-time monitoring, session tracking, and cost analytics.", { model: "claude-sonnet-4-20250514", costUsd: 0.04 });
 
   return messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 }
 
 const mockTimeline = buildMockTimeline();
 
-export const mockProjectDetails: Record<string, ProjectDetail> = {
-  "project-1": {
-    id: "project-1",
-    name: "Building ClaWatch",
-    description: "Full-stack AI observability platform with real-time monitoring, session tracking, and cost analytics",
-    stats: {
-      totalCostUsd: 185.98,
-      totalTokens: 4_820_000,
-      totalMessages: 128,
-      sessionCount: 3,
-      dateRange: { from: hoursAgo(48), to: minutesAgo(5) },
-    },
-    agentBreakdown: [
-      { agentId: "ofek", costUsd: 142.50, tokenCount: 3_200_000, messageCount: 78, percentage: 76.6 },
-      { agentId: "dor", costUsd: 28.48, tokenCount: 980_000, messageCount: 32, percentage: 15.3 },
-      { agentId: "anas", costUsd: 15.00, tokenCount: 640_000, messageCount: 18, percentage: 8.1 },
-    ],
-    sessions: [
-      mockSessions.find((s) => s.id === "session-1")!,
-      mockSessions.find((s) => s.id === "session-3")!,
-      mockSessions.find((s) => s.id === "session-8")!,
-    ],
-    timeline: mockTimeline,
-  },
-  "project-2": {
-    id: "project-2",
-    name: "Bug Fixes Sprint",
-    description: "Critical bug fixes for authentication, database schema, and CI pipeline issues",
-    stats: {
-      totalCostUsd: 12.50,
-      totalTokens: 1_120_000,
-      totalMessages: 60,
-      sessionCount: 2,
-      dateRange: { from: hoursAgo(24), to: minutesAgo(30) },
-    },
-    agentBreakdown: [
-      { agentId: "anas", costUsd: 7.80, tokenCount: 680_000, messageCount: 38, percentage: 62.4 },
-      { agentId: "dor", costUsd: 4.70, tokenCount: 440_000, messageCount: 22, percentage: 37.6 },
-    ],
-    sessions: [
-      mockSessions.find((s) => s.id === "session-2")!,
-      mockSessions.find((s) => s.id === "session-6")!,
-    ],
-    timeline: [
-      { sessionId: "session-2", agentId: "anas", id: "tl-b1", role: "user", timestamp: hoursAgo(3), content: "Fix the authentication bug in the user login flow. Users are getting 401 errors after token refresh." },
-      { sessionId: "session-2", agentId: "anas", id: "tl-b2", role: "assistant", timestamp: hoursAgo(2.9), content: "I'll investigate the auth flow. Let me check the token refresh logic.", model: "claude-sonnet-4-20250514", costUsd: 0.03 },
-      { sessionId: "session-6", agentId: "dor", id: "tl-b3", role: "user", timestamp: hoursAgo(2.8), content: "Debug the failing CI pipeline. Jest tests are timing out on the session module." },
-      { sessionId: "session-2", agentId: "anas", id: "tl-b4", role: "tool", timestamp: hoursAgo(2.7), content: "Found: refreshToken() doesn't await the database write before returning new token", toolName: "read" },
-      { sessionId: "session-6", agentId: "dor", id: "tl-b5", role: "assistant", timestamp: hoursAgo(2.6), content: "Looking at the CI logs. The Jest timeout suggests an unresolved promise in the test setup.", model: "claude-haiku-4-20250506", costUsd: 0.01 },
-      { sessionId: "session-2", agentId: "anas", id: "tl-b6", role: "assistant", timestamp: hoursAgo(2.5), content: "Found the bug: `refreshToken()` returns before the DB write completes. Adding await fixes the race condition.", model: "claude-sonnet-4-20250514", costUsd: 0.05 },
-      { sessionId: "session-6", agentId: "dor", id: "tl-b7", role: "tool", timestamp: hoursAgo(2.4), content: "$ jest --verbose\nFAILED: session.test.ts > should persist session data\nTimeout: 5000ms exceeded", toolName: "exec" },
-      { sessionId: "session-6", agentId: "dor", id: "tl-b8", role: "assistant", timestamp: hoursAgo(2.2), content: "The test is missing `afterAll` cleanup — the database connection stays open. Adding proper teardown.", model: "claude-haiku-4-20250506", costUsd: 0.02 },
-      { sessionId: "session-2", agentId: "anas", id: "tl-b9", role: "tool", timestamp: hoursAgo(2.1), content: "$ npm test -- auth.test.ts\n\nTests: 8 passed, 8 total", toolName: "exec" },
-      { sessionId: "session-6", agentId: "dor", id: "tl-b10", role: "tool", timestamp: hoursAgo(2.0), content: "$ jest session.test.ts --verbose\nPASSED: all 6 tests", toolName: "exec" },
-      { sessionId: "session-2", agentId: "anas", id: "tl-b11", role: "assistant", timestamp: hoursAgo(1.9), content: "Auth bug fixed and all tests passing. The root cause was a missing await in the token refresh handler.", model: "claude-sonnet-4-20250514", costUsd: 0.03 },
-      { sessionId: "session-6", agentId: "dor", id: "tl-b12", role: "assistant", timestamp: hoursAgo(1.8), content: "CI pipeline fixed. Added proper test teardown and increased timeout for integration tests to 10s.", model: "claude-haiku-4-20250506", costUsd: 0.02 },
-    ],
-  },
-};
+// Generate project details from DEMO_PROJECTS
+// Generate project-specific sessions with costs that sum to project total
+const sessionTitles = [
+  "Build dashboard with real-time monitoring",
+  "Implement API integration layer",
+  "Add automated test coverage",
+  "Optimize query performance",
+  "Set up CI/CD pipeline",
+  "Refactor authentication module",
+  "Add webhook event handlers",
+  "Build notification system",
+  "Implement rate limiting",
+  "Create admin management panel",
+];
+const sessionSplits = [
+  [0.45, 0.32, 0.23],
+  [0.38, 0.28, 0.20, 0.14],
+  [0.42, 0.30, 0.18, 0.06, 0.04],
+  [0.35, 0.25, 0.18, 0.12, 0.06, 0.04],
+  [0.32, 0.24, 0.18, 0.12, 0.08, 0.04, 0.02],
+  [0.30, 0.22, 0.17, 0.12, 0.08, 0.05, 0.04, 0.02],
+];
 
-function buildMockMessages(sessionId: string): SessionMessage[] {
+export const mockProjectDetails: Record<string, ProjectDetail> = Object.fromEntries(
+  DEMO_PROJECTS.map((proj, pi) => {
+    const cost = +proj.cost.toFixed(2);
+    const tokens = Math.floor(DEMO_TOTALS.tokens.allTime * proj.pct);
+    const totalMessages = 40 + pi * 20;
+    const projAgents = [
+      DEMO_AGENTS[pi % 8],
+      DEMO_AGENTS[(pi + 1) % 8],
+      DEMO_AGENTS[(pi + 3) % 8],
+    ];
+    const agentPcts = [0.50, 0.30, 0.20];
+
+    // 1 session per agent — costs match agent participation exactly
+    const projSessions: Session[] = projAgents.map((agent, ai) => {
+      const isLast = ai === projAgents.length - 1;
+      const prevCost = isLast ? agentPcts.slice(0, ai).reduce((s, p) => s + +(cost * p).toFixed(2), 0) : 0;
+      const sessionCost = isLast ? +(cost - prevCost).toFixed(2) : +(cost * agentPcts[ai]).toFixed(2);
+      const prevMsgs = isLast ? agentPcts.slice(0, ai).reduce((s, p) => s + Math.round(totalMessages * p), 0) : 0;
+      const sessionMsgs = isLast ? totalMessages - prevMsgs : Math.round(totalMessages * agentPcts[ai]);
+      return {
+        id: `proj-${pi + 1}-session-${ai + 1}`,
+        agentId: agent.id,
+        title: sessionTitles[(pi * 3 + ai) % sessionTitles.length],
+        status: ai === 0 ? "active" : ai === 1 ? "idle" : "completed",
+        costUsd: sessionCost,
+        tokenCount: Math.floor(tokens * agentPcts[ai]),
+        messageCount: sessionMsgs,
+        model: ai % 3 === 2 ? "claude-haiku-4-20250506" : "claude-sonnet-4-20250514",
+        startedAt: hoursAgo(ai * 4 + 1),
+        lastActivityAt: minutesAgo(ai * 15 + 2),
+        duration: 1800 + ai * 1200,
+        projects: [{ id: proj.id, name: proj.name }],
+      };
+    });
+
+    return [proj.id, {
+      id: proj.id,
+      name: proj.name,
+      description: mockProjects[pi]?.description || proj.name,
+      stats: {
+        totalCostUsd: cost,
+        totalTokens: tokens,
+        totalMessages: totalMessages,
+        sessionCount: projAgents.length,
+        dateRange: { from: hoursAgo(48 + pi * 24), to: minutesAgo(5 + pi * 15) },
+      },
+      agentBreakdown: projAgents.map((a, ai) => ({
+        agentId: a.id,
+        costUsd: +(cost * agentPcts[ai]).toFixed(2),
+        tokenCount: Math.floor(tokens * agentPcts[ai]),
+        messageCount: Math.floor(totalMessages * agentPcts[ai]),
+        percentage: agentPcts[ai] * 100,
+      })),
+      sessions: projSessions,
+      timeline: pi === 0 ? mockTimeline : [],
+    }];
+  })
+);function buildMockMessages(sessionId: string): SessionMessage[] {
   const base = [
     {
       id: `${sessionId}-msg-1`,

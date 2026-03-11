@@ -1,5 +1,6 @@
 import { Agent, Alert, AlertDetails, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile, AnalyticsData, SpendData, CostLimits } from "./types";
 import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails, mockAlertDetails } from "./mock-data";
+import { DEMO_AGENTS, DEMO_TOTALS, DEMO_PROJECTS } from "./demo-agents";
 
 // API_BASE: In the npm CLI, both frontend and API run on different ports.
 // The frontend server proxies /api/* to the backend, so we use relative URLs.
@@ -284,53 +285,123 @@ export async function removeSessionProject(sessionId: string, projectId: string)
   });
 }
 
-const mockAnalytics: AnalyticsData = (() => {
-  const dates = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date("2026-02-24");
-    d.setDate(d.getDate() + i);
+// Analytics mock — generates hourly/daily/weekly data from DEMO_TOTALS
+// Hours: 24h of today's spend, lower at night (01:00-07:00)
+// Days: 14 days of MTD-scale spend
+// Weeks: 8 weeks of allTime spend
+function buildMockAnalytics(groupBy: string): AnalyticsData {
+  const agents = DEMO_AGENTS.filter(a => a.spend.allTime > 50);
+  const projs = DEMO_PROJECTS.map(p => ({ projectId: p.id, name: p.name, pct: p.pct }));
+
+  const TOTAL_SESSIONS = 42; // must be identical across all groupBy modes
+
+  // Distribute an integer total across N buckets proportionally, ensuring exact sum
+  const distribute = (total: number, weights: number[]): number[] => {
+    const wSum = weights.reduce((s, v) => s + v, 0);
+    const raw = weights.map(w => total * w / wSum);
+    const floored = raw.map(v => Math.floor(v));
+    let remainder = total - floored.reduce((s, v) => s + v, 0);
+    const fracs = raw.map((v, i) => ({ i, frac: v - floored[i] })).sort((a, b) => b.frac - a.frac);
+    for (let j = 0; j < remainder; j++) floored[fracs[j].i]++;
+    return floored;
+  };
+
+  const build = (labels: string[], weights: number[], totalCost: number, totalTokens: number, agentKey: "today" | "mtd" | "allTime", tokenKey: "today" | "mtd" | "allTime") => {
+    const wSum = weights.reduce((s, v) => s + v, 0);
+    const sessionDist = distribute(TOTAL_SESSIONS, weights);
+    return {
+      buckets: labels.map((date, i) => ({
+        date,
+        costUsd: +(totalCost * weights[i] / wSum).toFixed(2),
+        tokenCount: Math.floor(totalTokens * weights[i] / wSum),
+        sessionCount: sessionDist[i],
+      })),
+      byAgent: agents.map(a => ({
+        agentId: a.name,
+        buckets: labels.map((date, i) => ({
+          date,
+          costUsd: +(a.spend[agentKey] * weights[i] / wSum).toFixed(2),
+          tokenCount: Math.floor(a.tokens[tokenKey] * weights[i] / wSum),
+          sessionCount: Math.max(0, Math.round((TOTAL_SESSIONS / agents.length) * weights[i] / wSum)),
+        })),
+      })),
+      byProject: projs.map(({ projectId, name, pct }) => ({
+        projectId,
+        name,
+        buckets: labels.map((date, i) => ({
+          date,
+          costUsd: +(totalCost * pct * weights[i] / wSum).toFixed(2),
+          tokenCount: Math.floor(totalTokens * pct * weights[i] / wSum),
+          sessionCount: Math.max(0, Math.round(TOTAL_SESSIONS * pct * weights[i] / wSum)),
+        })),
+      })),
+    };
+  };
+
+  if (groupBy === "hour") {
+    // 72 hours (3 days) with night dips at 01:00-07:00
+    const dayPattern = [
+      0.020, 0.005, 0.003, 0.003, 0.003, 0.005, 0.008, 0.020,
+      0.040, 0.060, 0.070, 0.075, 0.065, 0.070, 0.075, 0.070,
+      0.065, 0.060, 0.055, 0.050, 0.040, 0.035, 0.030, 0.025,
+    ];
+    // 3 days: day before yesterday, yesterday, today — slight upward trend
+    const dayScales = [0.85, 0.95, 1.20];
+    const w: number[] = [];
+    const labels: string[] = [];
+    for (let day = 0; day < 3; day++) {
+      for (let h = 0; h < 24; h++) {
+        w.push(dayPattern[h] * dayScales[day]);
+        const d = new Date();
+        d.setDate(d.getDate() - (2 - day));
+        d.setHours(h, 0, 0, 0);
+        labels.push(d.toISOString().slice(0, 13) + ":00");
+      }
+    }
+    // Use MTD spend spread across 3 days (more data than just today)
+    const threeDaySpend = DEMO_TOTALS.today * 3;
+    const threeDayTokens = DEMO_TOTALS.tokens.today * 3;
+    return build(labels, w, threeDaySpend, threeDayTokens, "today", "today");
+  }
+
+  if (groupBy === "week") {
+    const labels = Array.from({ length: 8 }, (_, i) => {
+      const d = new Date("2026-01-13"); d.setDate(d.getDate() + i * 7);
+      return d.toISOString().slice(0, 10);
+    });
+    // Gradual ramp-up over 8 weeks
+    const w = [0.08, 0.09, 0.10, 0.11, 0.12, 0.13, 0.17, 0.20];
+    return build(labels, w, DEMO_TOTALS.allTime, DEMO_TOTALS.tokens.allTime, "allTime", "allTime");
+  }
+
+  // Default: "day" — 56 daily buckets (8 weeks), allTime spend, gradual ramp-up
+  const labels = Array.from({ length: 56 }, (_, i) => {
+    const d = new Date("2026-01-13"); d.setDate(d.getDate() + i);
     return d.toISOString().slice(0, 10);
   });
-  const buckets = dates.map((date) => ({
-    date,
-    costUsd: +(5 + Math.random() * 15).toFixed(2),
-    tokenCount: Math.floor(1_000_000 + Math.random() * 4_000_000),
-    sessionCount: Math.floor(3 + Math.random() * 10),
-  }));
-  const agentIds = ["ofek", "anas", "dor"];
-  const byAgent = agentIds.map((agentId) => ({
-    agentId,
-    buckets: dates.map((date) => ({
-      date,
-      costUsd: +(1 + Math.random() * 6).toFixed(2),
-      tokenCount: Math.floor(300_000 + Math.random() * 1_500_000),
-      sessionCount: Math.floor(1 + Math.random() * 4),
-    })),
-  }));
-  const projectNames = [
-    { projectId: "proj-1", name: "ClaWatch" },
-    { projectId: "proj-2", name: "Auth Service" },
-    { projectId: "proj-3", name: "Mobile App" },
-  ];
-  const byProject = projectNames.map(({ projectId, name }) => ({
-    projectId,
-    name,
-    buckets: dates.map((date) => ({
-      date,
-      costUsd: +(1 + Math.random() * 5).toFixed(2),
-      tokenCount: Math.floor(200_000 + Math.random() * 1_200_000),
-      sessionCount: Math.floor(1 + Math.random() * 3),
-    })),
-  }));
-  return { buckets, byAgent, byProject };
-})();
+  // Gradual ramp-up over 56 days with weekly rhythm (weekends lower)
+  const w = labels.map((_, i) => {
+    const weekNum = Math.floor(i / 7);
+    const dayOfWeek = i % 7; // 0=Mon ... 6=Sun
+    const weekScale = 0.7 + weekNum * 0.08; // ramps up each week
+    const dayScale = dayOfWeek >= 5 ? 0.4 : 0.8 + (dayOfWeek % 3) * 0.1; // weekends lower
+    return weekScale * dayScale;
+  });
+  return build(labels, w, DEMO_TOTALS.allTime, DEMO_TOTALS.tokens.allTime, "allTime", "allTime");
+}
 
+const mockAnalyticsByGroup: Record<string, AnalyticsData> = {
+  hour: buildMockAnalytics("hour"),
+  day: buildMockAnalytics("day"),
+  week: buildMockAnalytics("week"),
+};
 export async function getAnalytics(params: {
   profile?: string;
   groupBy?: string;
   from?: string;
   to?: string;
 }): Promise<AnalyticsData> {
-  if (USE_MOCK) return mockAnalytics;
+  if (USE_MOCK) return mockAnalyticsByGroup[params.groupBy || "day"] || mockAnalyticsByGroup.day;
   try {
     const qs = new URLSearchParams();
     if (params.profile) qs.set("profile", params.profile);
@@ -341,7 +412,7 @@ export async function getAnalytics(params: {
     return await fetchJson<AnalyticsData>(`/api/analytics${query ? `?${query}` : ""}`);
   } catch {
     console.warn("API unreachable, falling back to mock analytics data");
-    return mockAnalytics;
+    return mockAnalyticsByGroup[params.groupBy || "day"] || mockAnalyticsByGroup.day;
   }
 }
 

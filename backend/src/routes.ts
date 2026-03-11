@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import db from "./db";
 import { listSessions, getSessionDetail, discoverProfiles, SessionSummary } from "./sessions";
+import { syncAllData, getLastSyncTime } from "./sync";
 import {
   createProject,
   listProjects,
@@ -58,6 +59,11 @@ router.get("/version", (_req: Request, res: Response) => {
 // ---------- Agents ----------
 
 router.get("/agents", async (_req: Request, res: Response) => {
+  // Trigger sync if last sync was >10s ago (keeps agents fresh with sessions)
+  if (Date.now() - getLastSyncTime() > 10_000) {
+    try { await syncAllData(); } catch { /* non-fatal */ }
+  }
+
   const statusFilter = (_req.query.status as string) || "active";
   const profileFilter = _req.query.profile as string | undefined;
   const agents = db.prepare("SELECT * FROM agents ORDER BY costUsd DESC").all() as any[];

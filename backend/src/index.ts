@@ -54,8 +54,9 @@ async function main() {
   await syncAllData();
   startAlertChecker();
 
-  // Re-sync periodically (every 60s) to keep DB in sync with JSONL
-  setInterval(() => syncAllData(), 60_000);
+  // Re-sync periodically (every 15s) to keep DB in sync with JSONL
+  // Reduced from 60s to match session freshness and keep agents tab in sync
+  setInterval(() => syncAllData(), 15_000);
 
   app.listen(PORT, () => {
     console.log(`[ClaWatch] Backend running on http://localhost:${PORT}`);

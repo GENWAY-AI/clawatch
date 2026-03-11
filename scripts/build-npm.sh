@@ -9,17 +9,19 @@ ROOT="$SCRIPT_DIR/.."
 # 1. Build backend
 echo "  Building backend..."
 cd "$ROOT/backend"
-npx tsc
+npm install --ignore-scripts
+./node_modules/.bin/tsc
 
 # 2. Build frontend (Next.js standalone)
 echo "  Building frontend..."
 cd "$ROOT/frontend"
+npm install --ignore-scripts
 NEXT_PUBLIC_USE_MOCK="" npm run build
 
 # 3. Build CLI (run tsc directly to avoid recursion — cli's npm run build calls this script)
 echo "  Building CLI..."
 cd "$ROOT/cli"
-npx tsc
+./node_modules/.bin/tsc
 
 # 4. Bundle backend into CLI
 echo "  Bundling backend..."

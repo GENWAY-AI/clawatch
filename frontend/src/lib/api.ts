@@ -117,10 +117,6 @@ export async function getCosts(params?: { profile?: string; from?: string; to?: 
   }
 }
 
-export function getCostsCSVUrl(profile?: string): string {
-  const qs = profile ? `?profile=${profile}` : "";
-  return `${API_BASE}/api/costs/export${qs}`;
-}
 
 export async function pauseAgent(id: string): Promise<void> {
   if (USE_MOCK) return;

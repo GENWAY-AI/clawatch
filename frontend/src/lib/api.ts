@@ -293,6 +293,8 @@ function buildMockAnalytics(groupBy: string): AnalyticsData {
   const agents = DEMO_AGENTS.filter(a => a.spend.allTime > 50);
   const projs = DEMO_PROJECTS.map(p => ({ projectId: p.id, name: p.name, pct: p.pct }));
 
+  const TOTAL_SESSIONS = 42; // consistent across all groupBy modes
+
   const build = (labels: string[], weights: number[], totalCost: number, totalTokens: number, agentKey: "today" | "mtd" | "allTime", tokenKey: "today" | "mtd" | "allTime") => {
     const wSum = weights.reduce((s, v) => s + v, 0);
     return {
@@ -300,7 +302,7 @@ function buildMockAnalytics(groupBy: string): AnalyticsData {
         date,
         costUsd: +(totalCost * weights[i] / wSum).toFixed(2),
         tokenCount: Math.floor(totalTokens * weights[i] / wSum),
-        sessionCount: weights[i] > 0.04 ? 3 + (i % 5) : 1 + (i % 2),
+        sessionCount: Math.max(1, Math.round(TOTAL_SESSIONS * weights[i] / wSum)),
       })),
       byAgent: agents.map(a => ({
         agentId: a.name,
@@ -308,7 +310,7 @@ function buildMockAnalytics(groupBy: string): AnalyticsData {
           date,
           costUsd: +(a.spend[agentKey] * weights[i] / wSum).toFixed(2),
           tokenCount: Math.floor(a.tokens[tokenKey] * weights[i] / wSum),
-          sessionCount: weights[i] > 0.04 ? 1 + (i % 3) : i % 3 === 0 ? 1 : 0,
+          sessionCount: Math.max(0, Math.round((TOTAL_SESSIONS / agents.length) * weights[i] / wSum)),
         })),
       })),
       byProject: projs.map(({ projectId, name, pct }) => ({
@@ -318,7 +320,7 @@ function buildMockAnalytics(groupBy: string): AnalyticsData {
           date,
           costUsd: +(totalCost * pct * weights[i] / wSum).toFixed(2),
           tokenCount: Math.floor(totalTokens * pct * weights[i] / wSum),
-          sessionCount: weights[i] > 0.04 ? 1 + (i % 2) : 0,
+          sessionCount: Math.max(0, Math.round(TOTAL_SESSIONS * pct * weights[i] / wSum)),
         })),
       })),
     };
@@ -360,13 +362,20 @@ function buildMockAnalytics(groupBy: string): AnalyticsData {
     return build(labels, w, DEMO_TOTALS.allTime, DEMO_TOTALS.tokens.allTime, "allTime", "allTime");
   }
 
-  // Default: "day" — 14 daily buckets
-  const labels = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date("2026-02-24"); d.setDate(d.getDate() + i);
+  // Default: "day" — 56 daily buckets (8 weeks), allTime spend, gradual ramp-up
+  const labels = Array.from({ length: 56 }, (_, i) => {
+    const d = new Date("2026-01-13"); d.setDate(d.getDate() + i);
     return d.toISOString().slice(0, 10);
   });
-  const w = [0.060, 0.070, 0.065, 0.080, 0.072, 0.068, 0.075, 0.073, 0.071, 0.082, 0.069, 0.076, 0.074, 0.065];
-  return build(labels, w, DEMO_TOTALS.mtd, DEMO_TOTALS.tokens.mtd, "mtd", "mtd");
+  // Gradual ramp-up over 56 days with weekly rhythm (weekends lower)
+  const w = labels.map((_, i) => {
+    const weekNum = Math.floor(i / 7);
+    const dayOfWeek = i % 7; // 0=Mon ... 6=Sun
+    const weekScale = 0.7 + weekNum * 0.08; // ramps up each week
+    const dayScale = dayOfWeek >= 5 ? 0.4 : 0.8 + (dayOfWeek % 3) * 0.1; // weekends lower
+    return weekScale * dayScale;
+  });
+  return build(labels, w, DEMO_TOTALS.allTime, DEMO_TOTALS.tokens.allTime, "allTime", "allTime");
 }
 
 const mockAnalyticsByGroup: Record<string, AnalyticsData> = {

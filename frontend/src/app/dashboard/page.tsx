@@ -454,6 +454,7 @@ function DashboardContent() {
   const [hiddenProjectSeries, setHiddenProjectSeries] = useState<Set<string>>(new Set());
   const [spendData, setSpendData] = useState<SpendData | null>(null);
   const [showCostSettings, setShowCostSettings] = useState(false);
+  const [showAlertPanel, setShowAlertPanel] = useState(false);
 
   const selectedProfile = searchParams.get("profile") || "default";
   const analyticsGroupBy = (searchParams.get("groupBy") as "hour" | "day" | "week") || "day";
@@ -863,12 +864,7 @@ function DashboardContent() {
           </Card>
           <Card
             className="cursor-pointer hover:border-emerald-500/30 transition-colors"
-            onClick={() => {
-              setTab("agents");
-              setTimeout(() => {
-                document.getElementById("alerts-section")?.scrollIntoView({ behavior: "smooth" });
-              }, 100);
-            }}
+            onClick={() => setShowAlertPanel(true)}
           >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Active Alerts</CardTitle>
@@ -893,6 +889,154 @@ function DashboardContent() {
             }}
             onClose={() => setShowCostSettings(false)}
           />
+        )}
+
+        {/* Alert Panel Drawer */}
+        {showAlertPanel && (
+          <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowAlertPanel(false)}>
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <div
+              className="relative w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-full overflow-y-auto animate-in slide-in-from-right"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="sticky top-0 bg-zinc-950/95 backdrop-blur border-b border-zinc-800 px-5 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Active Alerts</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {unackedAlerts.length} unacknowledged alert{unackedAlerts.length !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {unackedAlerts.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                      disabled={ackAllLoading}
+                      onClick={handleAcknowledgeAll}
+                    >
+                      {ackAllLoading ? "..." : "Ack All"}
+                    </Button>
+                  )}
+                  <button
+                    onClick={() => setShowAlertPanel(false)}
+                    className="size-8 flex items-center justify-center rounded-md hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white"
+                  >
+                    <svg className="size-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Alert list */}
+              <div className="p-4 space-y-2">
+                {unackedAlerts.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <div className="text-3xl mb-2">✅</div>
+                    <p className="text-sm">All clear — no active alerts</p>
+                  </div>
+                ) : (
+                  aggregatedAlerts
+                    .filter(({ alert }) => !alert.acknowledged)
+                    .map(({ alert, count, ids }) => {
+                      const sc = severityConfig[alert.severity];
+                      const expanded = expandedAlerts[alert.id];
+                      const isExpanded = !!expanded;
+                      const isLoading = expanded === "loading";
+                      const details = expanded && expanded !== "loading" ? expanded : prefetchedDetails[alert.id] || null;
+                      const humanTitle = getHumanTitle(alert, details);
+                      return (
+                        <div key={alert.id} className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+                          <div
+                            className="flex items-center justify-between px-3 py-2.5 text-sm cursor-pointer hover:bg-white/[0.02] transition-colors"
+                            onClick={() => handleToggleAlertDetails(alert.id)}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <svg
+                                className={`size-3 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                                fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                              </svg>
+                              <Badge variant="outline" className={`${sc.color} border text-[10px] uppercase font-bold shrink-0`}>
+                                {alert.severity}
+                              </Badge>
+                              <span className="font-medium truncate">{humanTitle}</span>
+                              {count > 1 && (
+                                <Badge variant="outline" className="text-[10px] text-muted-foreground shrink-0">×{count}</Badge>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-muted-foreground shrink-0 ml-2">{formatRelativeTime(alert.timestamp)}</span>
+                          </div>
+                          {isExpanded && (
+                            <div className="px-3 pb-3 border-t border-zinc-800/50">
+                              {isLoading ? (
+                                <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                                  <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  Loading...
+                                </div>
+                              ) : details ? (
+                                <div className="pt-2.5 space-y-2 text-xs">
+                                  {details.description && <p className="text-zinc-300">{details.description}</p>}
+                                  <div className="flex items-center gap-2 text-muted-foreground">
+                                    <span>Agent:</span>
+                                    <span className="font-medium text-foreground">{details.agent.name}</span>
+                                  </div>
+                                  {details.context?.stuckDurationMinutes != null && (
+                                    <p className="text-amber-400">Stuck for {details.context.stuckDurationMinutes}m</p>
+                                  )}
+                                  {details.context?.currentCostUsd != null && (
+                                    <p className="text-amber-400">Cost: ${details.context.currentCostUsd.toFixed(2)} / ${details.context.thresholdUsd?.toFixed(2)} threshold</p>
+                                  )}
+                                  {details.relatedErrors.length > 0 && (
+                                    <pre className="rounded-md bg-zinc-900 p-2 text-[11px] text-zinc-400 overflow-x-auto max-h-32 overflow-y-auto">
+                                      {details.relatedErrors.map((e) => e.error).join("\n")}
+                                    </pre>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="py-2 text-xs text-muted-foreground">{alert.message}</p>
+                              )}
+                              <div className="flex justify-end mt-2">
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  className="text-xs text-emerald-400 hover:bg-emerald-500/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    ids.forEach((id) => handleAcknowledge(id));
+                                  }}
+                                >
+                                  Acknowledge{count > 1 ? ` all (${count})` : ""}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+
+              {/* Footer link */}
+              <div className="sticky bottom-0 bg-zinc-950/95 backdrop-blur border-t border-zinc-800 px-5 py-3">
+                <button
+                  className="w-full text-center text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                  onClick={() => {
+                    setShowAlertPanel(false);
+                    setTab("agents");
+                    setTimeout(() => {
+                      document.getElementById("alerts-section")?.scrollIntoView({ behavior: "smooth" });
+                    }, 100);
+                  }}
+                >
+                  View all alerts →
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Tabs */}

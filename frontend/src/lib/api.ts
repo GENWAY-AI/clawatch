@@ -325,17 +325,29 @@ function buildMockAnalytics(groupBy: string): AnalyticsData {
   };
 
   if (groupBy === "hour") {
-    const labels = Array.from({ length: 24 }, (_, i) => {
-      const d = new Date(); d.setHours(i, 0, 0, 0);
-      return d.toISOString().slice(0, 13) + ":00";
-    });
-    // Night hours (01-07) are much lower — realistic work pattern
-    const w = [
+    // 72 hours (3 days) with night dips at 01:00-07:00
+    const dayPattern = [
       0.020, 0.005, 0.003, 0.003, 0.003, 0.005, 0.008, 0.020,
       0.040, 0.060, 0.070, 0.075, 0.065, 0.070, 0.075, 0.070,
       0.065, 0.060, 0.055, 0.050, 0.040, 0.035, 0.030, 0.025,
     ];
-    return build(labels, w, DEMO_TOTALS.today, DEMO_TOTALS.tokens.today, "today", "today");
+    // 3 days: day before yesterday, yesterday, today — slight upward trend
+    const dayScales = [0.85, 0.95, 1.20];
+    const w: number[] = [];
+    const labels: string[] = [];
+    for (let day = 0; day < 3; day++) {
+      for (let h = 0; h < 24; h++) {
+        w.push(dayPattern[h] * dayScales[day]);
+        const d = new Date();
+        d.setDate(d.getDate() - (2 - day));
+        d.setHours(h, 0, 0, 0);
+        labels.push(d.toISOString().slice(0, 13) + ":00");
+      }
+    }
+    // Use MTD spend spread across 3 days (more data than just today)
+    const threeDaySpend = DEMO_TOTALS.today * 3;
+    const threeDayTokens = DEMO_TOTALS.tokens.today * 3;
+    return build(labels, w, threeDaySpend, threeDayTokens, "today", "today");
   }
 
   if (groupBy === "week") {

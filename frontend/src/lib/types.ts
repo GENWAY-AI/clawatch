@@ -68,10 +68,41 @@ export interface AlertDetails {
   description?: string;
 }
 
+export interface CostByAgent {
+  agentId: string;
+  name: string;
+  costUsd: number;
+  tokenCount: number;
+}
+
+export interface CostByModel {
+  model: string;
+  costUsd: number;
+}
+
+export interface CostByProject {
+  projectId: string;
+  name: string;
+  costUsd: number;
+  tokenCount: number;
+  sessionCount: number;
+}
+
+export interface CostDaily {
+  date: string;
+  costUsd: number;
+  tokenCount: number;
+  sessionCount: number;
+}
+
 export interface CostData {
   totalUsd: number;
-  byAgent: { agentId: string; name: string; costUsd: number }[];
-  byModel: { model: string; costUsd: number }[];
+  totalTokens: number;
+  sessionCount: number;
+  byAgent: CostByAgent[];
+  byModel: CostByModel[];
+  byProject: CostByProject[];
+  daily: CostDaily[];
 }
 
 export type SessionStatus = "active" | "idle" | "completed";

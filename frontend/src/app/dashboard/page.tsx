@@ -790,7 +790,7 @@ function DashboardContent() {
                 <span className="text-xl text-muted-foreground/40 font-light">/</span>
                 <span className={`text-3xl font-bold ${runningCount > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>{runningCount}</span>
               </div>
-              <div className="text-[11px] text-muted-foreground/60 mt-0.5">Total / Running</div>
+              <div className="mt-2 text-[11px] text-muted-foreground/60">Total / Running</div>
             </CardContent>
           </Card>
           <Card>

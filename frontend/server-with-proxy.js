@@ -1,5 +1,7 @@
 // ClaWatch dashboard server: Next.js standalone + API reverse proxy
 // This replaces the default server.js to proxy /api/* to the backend
+// Must set production before any require — standalone builds only ship production React
+process.env.NODE_ENV = "production";
 const http = require("http");
 const path = require("path");
 

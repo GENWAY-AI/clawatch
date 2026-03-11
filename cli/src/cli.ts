@@ -272,6 +272,7 @@ program
           cwd: frontendDir,
           env: {
             ...process.env,
+            NODE_ENV: 'production',
             PORT: FRONTEND_PORT,
             HOSTNAME: '0.0.0.0',
             BACKEND_PORT: BACKEND_PORT,

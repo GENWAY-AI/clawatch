@@ -332,8 +332,8 @@ function CostSettingsModal({
               <label className="text-sm text-muted-foreground mb-2 block">Per-Agent Overrides</label>
               <div className="space-y-2">
                 {agents.map((agent) => (
-                  <div key={agent} className="grid grid-cols-[140px_1fr] items-center gap-3">
-                    <span className="text-sm text-zinc-300 truncate" title={agent}>{agent}</span>
+                  <div key={agent} className="grid grid-cols-[minmax(80px,auto)_1fr] items-center gap-3">
+                    <span className="text-sm text-zinc-300 truncate">{agent}</span>
                     <input
                       type="number"
                       min="0"

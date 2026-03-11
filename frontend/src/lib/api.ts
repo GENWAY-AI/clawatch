@@ -102,24 +102,15 @@ export async function acknowledgeAllAlerts(severity?: AlertSeverity): Promise<{ 
   );
 }
 
-export async function getCosts(params?: { profile?: string; from?: string; to?: string }): Promise<CostData> {
+export async function getCosts(profile?: string): Promise<CostData> {
   if (USE_MOCK) return mockCosts;
   try {
-    const qs = new URLSearchParams();
-    if (params?.profile) qs.set("profile", params.profile);
-    if (params?.from) qs.set("from", params.from);
-    if (params?.to) qs.set("to", params.to);
-    const query = qs.toString();
-    return await fetchJson<CostData>(`/api/costs${query ? `?${query}` : ""}`);
+    const qs = profile ? `?profile=${profile}` : "";
+    return await fetchJson<CostData>(`/api/costs${qs}`);
   } catch {
     console.warn("API unreachable, falling back to mock data"); markMockFallback();
     return mockCosts;
   }
-}
-
-export function getCostsCSVUrl(profile?: string): string {
-  const qs = profile ? `?profile=${profile}` : "";
-  return `${API_BASE}/api/costs/export${qs}`;
 }
 
 export async function pauseAgent(id: string): Promise<void> {

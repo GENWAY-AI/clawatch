@@ -137,34 +137,16 @@ export const mockAlerts: Alert[] = [
 
 export const mockCosts: CostData = {
   totalUsd: 39.65,
-  totalTokens: 4_500_000,
-  sessionCount: 12,
   byAgent: mockAgents.map((a) => ({
     agentId: a.id,
     name: a.name,
     costUsd: a.costUsd,
-    tokenCount: a.tokenCount,
   })),
   byModel: [
     { model: "claude-sonnet-4-20250514", costUsd: 22.1 },
     { model: "claude-haiku-4-20250506", costUsd: 11.35 },
     { model: "gpt-4o", costUsd: 6.2 },
   ],
-  byProject: [
-    { projectId: "proj-1", name: "ClaWatch", costUsd: 18.5, tokenCount: 2_100_000, sessionCount: 5 },
-    { projectId: "proj-2", name: "Auth Service", costUsd: 12.35, tokenCount: 1_400_000, sessionCount: 4 },
-    { projectId: "proj-3", name: "Mobile App", costUsd: 8.8, tokenCount: 1_000_000, sessionCount: 3 },
-  ],
-  daily: Array.from({ length: 7 }, (_, i) => {
-    const d = new Date("2026-03-04");
-    d.setDate(d.getDate() + i);
-    return {
-      date: d.toISOString().slice(0, 10),
-      costUsd: +(3 + Math.random() * 8).toFixed(2),
-      tokenCount: Math.floor(400_000 + Math.random() * 800_000),
-      sessionCount: Math.floor(1 + Math.random() * 4),
-    };
-  }),
 };
 
 export const mockSessions: Session[] = [

@@ -169,7 +169,7 @@ program
 
       // Build args: pass through all flags except -d/--daemon, add __CLAWATCH_DAEMON env
       const args = process.argv.slice(2).filter(a => a !== '-d' && a !== '--daemon');
-      args.unshift('--no-open'); // don't open browser in background mode
+      args.unshift('--no-open'); // parent handles browser open, not the background child
 
       const child = spawn(process.execPath, [__filename, ...args], {
         detached: true,
@@ -180,11 +180,26 @@ program
       child.unref();
       fs.closeSync(logFd);
 
+      const dashPort = opts.port || '3456';
+      const dashUrl = `http://localhost:${dashPort}`;
+
       console.log(chalk.green.bold(`\n✅ ClaWatch daemon started (PID ${child.pid})`));
+      console.log(chalk.green(`   Dashboard: ${dashUrl}`));
       console.log(chalk.gray(`   Logs: ${logFile}`));
       console.log(chalk.gray(`   Stop: clawatch stop`));
       console.log(chalk.gray(`   Status: clawatch status\n`));
-      process.exit(0);
+
+      // Open browser after a short delay (give backend/frontend time to boot)
+      if (opts.open !== false) {
+        setTimeout(() => {
+          const { exec: execCmd } = require('child_process');
+          const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+          execCmd(`${openCmd} ${dashUrl}`);
+        }, 3000);
+      }
+
+      // Exit after browser opens
+      setTimeout(() => process.exit(0), 3500);
     }
 
     console.log(chalk.bold('\n🔍 ClaWatch — AI Agent Observability\n'));

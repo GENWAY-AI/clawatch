@@ -83,8 +83,7 @@ clawatch/
 ├── backend/     # Express API + SQLite (sql.js WASM)
 ├── frontend/    # Next.js 16 dashboard
 ├── cli/         # npm CLI package (clawatch start/stop/status)
-├── scripts/     # Dev and build scripts
-└── video/       # Marketing video (Remotion)
+└── scripts/     # Dev and build scripts
 ```
 
 ## Development

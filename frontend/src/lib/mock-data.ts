@@ -375,17 +375,65 @@ function buildMockTimeline(): TimelineMessage[] {
 const mockTimeline = buildMockTimeline();
 
 // Generate project details from DEMO_PROJECTS
+// Generate project-specific sessions with costs that sum to project total
+const sessionTitles = [
+  "Build dashboard with real-time monitoring",
+  "Implement API integration layer",
+  "Add automated test coverage",
+  "Optimize query performance",
+  "Set up CI/CD pipeline",
+  "Refactor authentication module",
+  "Add webhook event handlers",
+  "Build notification system",
+  "Implement rate limiting",
+  "Create admin management panel",
+];
+const sessionSplits = [
+  [0.45, 0.32, 0.23],
+  [0.38, 0.28, 0.20, 0.14],
+  [0.42, 0.30, 0.18, 0.06, 0.04],
+  [0.35, 0.25, 0.18, 0.12, 0.06, 0.04],
+  [0.32, 0.24, 0.18, 0.12, 0.08, 0.04, 0.02],
+  [0.30, 0.22, 0.17, 0.12, 0.08, 0.05, 0.04, 0.02],
+];
+
 export const mockProjectDetails: Record<string, ProjectDetail> = Object.fromEntries(
   DEMO_PROJECTS.map((proj, pi) => {
     const cost = +proj.cost.toFixed(2);
     const tokens = Math.floor(DEMO_TOTALS.tokens.allTime * proj.pct);
-    // Assign 2-3 agents per project (rotating through DEMO_AGENTS)
+    const sessionCount = 3 + pi;
+    const totalMessages = 40 + pi * 20;
+    const splits = sessionSplits[pi];
     const projAgents = [
       DEMO_AGENTS[pi % 8],
       DEMO_AGENTS[(pi + 1) % 8],
       DEMO_AGENTS[(pi + 3) % 8],
     ];
     const agentPcts = [0.50, 0.30, 0.20];
+
+    // Build sessions that sum exactly to project cost/messages
+    const projSessions: Session[] = splits.map((pct, si) => {
+      const isLast = si === splits.length - 1;
+      const prevCost = isLast ? splits.slice(0, si).reduce((s, p) => s + +(cost * p).toFixed(2), 0) : 0;
+      const sessionCost = isLast ? +(cost - prevCost).toFixed(2) : +(cost * pct).toFixed(2);
+      const prevMsgs = isLast ? splits.slice(0, si).reduce((s, p) => s + Math.round(totalMessages * p), 0) : 0;
+      const sessionMsgs = isLast ? totalMessages - prevMsgs : Math.round(totalMessages * pct);
+      const agent = DEMO_AGENTS[(pi + si) % 8];
+      return {
+        id: `proj-${pi + 1}-session-${si + 1}`,
+        agentId: agent.id,
+        title: sessionTitles[(pi * 3 + si) % sessionTitles.length],
+        status: si === 0 ? "active" : si === 1 ? "idle" : "completed",
+        costUsd: sessionCost,
+        tokenCount: Math.floor(tokens * pct),
+        messageCount: sessionMsgs,
+        model: si % 3 === 2 ? "claude-haiku-4-20250506" : "claude-sonnet-4-20250514",
+        startedAt: hoursAgo(si * 4 + 1),
+        lastActivityAt: minutesAgo(si * 15 + 2),
+        duration: 1800 + si * 1200,
+        projects: [{ id: proj.id, name: proj.name }],
+      };
+    });
 
     return [proj.id, {
       id: proj.id,
@@ -394,18 +442,18 @@ export const mockProjectDetails: Record<string, ProjectDetail> = Object.fromEntr
       stats: {
         totalCostUsd: cost,
         totalTokens: tokens,
-        totalMessages: 40 + pi * 20,
-        sessionCount: 3 + pi,
+        totalMessages: totalMessages,
+        sessionCount: sessionCount,
         dateRange: { from: hoursAgo(48 + pi * 24), to: minutesAgo(5 + pi * 15) },
       },
       agentBreakdown: projAgents.map((a, ai) => ({
         agentId: a.id,
         costUsd: +(cost * agentPcts[ai]).toFixed(2),
         tokenCount: Math.floor(tokens * agentPcts[ai]),
-        messageCount: Math.floor((40 + pi * 20) * agentPcts[ai]),
+        messageCount: Math.floor(totalMessages * agentPcts[ai]),
         percentage: agentPcts[ai] * 100,
       })),
-      sessions: mockSessions.filter((_, si) => si % DEMO_PROJECTS.length === pi).slice(0, 3),
+      sessions: projSessions,
       timeline: pi === 0 ? mockTimeline : [],
     }];
   })

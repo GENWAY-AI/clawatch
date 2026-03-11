@@ -332,15 +332,15 @@ function CostSettingsModal({
               <label className="text-sm text-muted-foreground mb-2 block">Per-Agent Overrides</label>
               <div className="space-y-2">
                 {agents.map((agent) => (
-                  <div key={agent} className="flex items-center gap-2">
-                    <span className="text-sm text-zinc-300 w-20">{agent}</span>
+                  <div key={agent} className="grid grid-cols-[minmax(80px,auto)_1fr] items-center gap-3">
+                    <span className="text-sm text-zinc-300 truncate">{agent}</span>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
                       value={agentLimits[agent] ?? ""}
                       onChange={(e) => setAgentLimits((prev) => ({ ...prev, [agent]: e.target.value }))}
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:border-emerald-500/50"
+                      className="w-full px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:border-emerald-500/50"
                       placeholder="No override"
                     />
                   </div>

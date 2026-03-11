@@ -1,10 +1,6 @@
-<p align="center">
-  <img src="frontend/public/clawatch-owl.svg" alt="ClaWatch Logo" width="130" height="130" />
-</p>
+# 🔍 ClaWatch
 
-<h1 align="center">ClaWatch</h1>
-
-<p align="center"><strong>Never let your agents run wild.</strong></p>
+**Never let your agents run wild.**
 
 Open-source observability & monitoring for AI agents. Think Datadog, but for agent pipelines.
 

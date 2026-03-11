@@ -785,9 +785,9 @@ function DashboardContent() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Agents</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-baseline gap-1">
+              <div className="flex items-baseline gap-2.5">
                 <span className={`text-3xl font-bold ${runningCount > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>{runningCount}</span>
-                <span className="text-2xl text-muted-foreground font-medium">/</span>
+                <span className="text-2xl text-muted-foreground/50 font-normal">/</span>
                 <span className="text-3xl font-bold">{totalAgentCount}</span>
               </div>
               <div className="mt-2 text-[11px] text-muted-foreground/60">Active / Total</div>

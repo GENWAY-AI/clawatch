@@ -146,8 +146,47 @@ program
   .command('start', { isDefault: true })
   .description('Start ClaWatch: backend + monitoring + dashboard')
   .option('-p, --port <port>', 'Dashboard port', '3456')
+  .option('-d, --daemon', 'Run in background (daemon mode)')
   .option('--no-open', 'Don\'t open browser')
   .action(async (opts) => {
+    // --- Daemon mode: re-spawn self as detached background process ---
+    if (opts.daemon && !process.env.__CLAWATCH_DAEMON) {
+      // Check if already running
+      const pids = loadPids();
+      const alreadyRunning = Object.entries(pids).some(([, pid]) => {
+        if (!pid) return false;
+        try { process.kill(pid, 0); return true; } catch { return false; }
+      });
+      if (alreadyRunning) {
+        console.log(chalk.red('\n❌ ClaWatch is already running.'));
+        console.log(chalk.yellow('   Run "clawatch stop" first, or "clawatch status" to check.\n'));
+        process.exit(1);
+      }
+
+      ensureDir();
+      const logFile = paths.log;
+      const logFd = fs.openSync(logFile, 'a');
+
+      // Build args: pass through all flags except -d/--daemon, add __CLAWATCH_DAEMON env
+      const args = process.argv.slice(2).filter(a => a !== '-d' && a !== '--daemon');
+      args.unshift('--no-open'); // don't open browser in background mode
+
+      const child = spawn(process.execPath, [__filename, ...args], {
+        detached: true,
+        stdio: ['ignore', logFd, logFd],
+        env: { ...process.env, __CLAWATCH_DAEMON: '1', FORCE_COLOR: '0' },
+      });
+
+      child.unref();
+      fs.closeSync(logFd);
+
+      console.log(chalk.green.bold(`\n✅ ClaWatch daemon started (PID ${child.pid})`));
+      console.log(chalk.gray(`   Logs: ${logFile}`));
+      console.log(chalk.gray(`   Stop: clawatch stop`));
+      console.log(chalk.gray(`   Status: clawatch status\n`));
+      process.exit(0);
+    }
+
     console.log(chalk.bold('\n🔍 ClaWatch — AI Agent Observability\n'));
 
     // Kill ALL existing ClaWatch processes (daemon + backend + frontend)
@@ -465,7 +504,15 @@ program
     let totalAgentCount = 0;
     let totalSessionCount = 0;
 
+    // Determine if running as daemon (detached) or foreground
+    const isAnyRunning = Object.entries(pids).some(([, pid]) => {
+      if (!pid) return false;
+      try { process.kill(pid, 0); return true; } catch { return false; }
+    });
+    const mode = isAnyRunning ? chalk.green('daemon (background)') : chalk.red('stopped');
+
     console.log(chalk.bold('\n🔍 ClaWatch Status\n'));
+    console.log(`  Mode:      ${mode}`);
     console.log(`  Backend:   ${processStatus('backend', pids.backend)}`);
     console.log(`  Frontend:  ${processStatus('frontend', pids.frontend)}`);
     console.log(`  Daemon:    ${processStatus('daemon', pids.daemon)}`);
@@ -500,9 +547,10 @@ program
   .command('logs')
   .description('Tail daemon logs')
   .option('-n <lines>', 'Number of lines', '50')
+  .option('-f, --follow', 'Follow log output (like tail -f)')
   .action((opts) => {
     if (!fs.existsSync(paths.log)) {
-      console.log(chalk.yellow('No log file yet'));
+      console.log(chalk.yellow('No log file yet. Start ClaWatch with -d first.'));
       process.exit(0);
     }
 
@@ -510,6 +558,30 @@ program
     const lines = content.trim().split('\n');
     const n = parseInt(opts.n || opts.N || '50', 10);
     console.log(lines.slice(-n).join('\n'));
+
+    if (opts.follow) {
+      // Tail -f mode: watch for new content
+      let pos = fs.statSync(paths.log).size;
+      const watcher = fs.watchFile(paths.log, { interval: 300 }, () => {
+        const stat = fs.statSync(paths.log);
+        if (stat.size > pos) {
+          const fd = fs.openSync(paths.log, 'r');
+          const buf = Buffer.alloc(stat.size - pos);
+          fs.readSync(fd, buf, 0, buf.length, pos);
+          fs.closeSync(fd);
+          process.stdout.write(buf.toString());
+          pos = stat.size;
+        } else if (stat.size < pos) {
+          // Log was truncated/rotated
+          pos = 0;
+        }
+      });
+
+      process.on('SIGINT', () => {
+        fs.unwatchFile(paths.log);
+        process.exit(0);
+      });
+    }
   });
 
 program.parse();

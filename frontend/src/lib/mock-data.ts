@@ -418,7 +418,7 @@ export const mockProjectDetails: Record<string, ProjectDetail> = Object.fromEntr
       const sessionCost = isLast ? +(cost - prevCost).toFixed(2) : +(cost * pct).toFixed(2);
       const prevMsgs = isLast ? splits.slice(0, si).reduce((s, p) => s + Math.round(totalMessages * p), 0) : 0;
       const sessionMsgs = isLast ? totalMessages - prevMsgs : Math.round(totalMessages * pct);
-      const agent = DEMO_AGENTS[(pi + si) % 8];
+      const agent = projAgents[si % projAgents.length];
       return {
         id: `proj-${pi + 1}-session-${si + 1}`,
         agentId: agent.id,

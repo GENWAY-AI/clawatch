@@ -1,6 +1,6 @@
 import { Agent, Alert, AlertDetails, AlertsResponse, AlertSeverity, CostData, Session, SessionDetail, Project, ProjectDetail, Profile, AnalyticsData, SpendData, CostLimits } from "./types";
 import { mockAgents, mockAlerts, mockCosts, mockSessions, mockSessionDetails, mockProjects, mockProjectDetails, mockAlertDetails } from "./mock-data";
-import { DEMO_AGENTS, DEMO_TOTALS } from "./demo-agents";
+import { DEMO_AGENTS, DEMO_TOTALS, DEMO_PROJECTS } from "./demo-agents";
 
 // API_BASE: In the npm CLI, both frontend and API run on different ports.
 // The frontend server proxies /api/* to the backend, so we use relative URLs.
@@ -291,11 +291,7 @@ export async function removeSessionProject(sessionId: string, projectId: string)
 // Weeks: 8 weeks of allTime spend
 function buildMockAnalytics(groupBy: string): AnalyticsData {
   const agents = DEMO_AGENTS.filter(a => a.spend.allTime > 50);
-  const projs = [
-    { projectId: "proj-1", name: "ClaWatch", pct: 0.45 },
-    { projectId: "proj-2", name: "Auth Service", pct: 0.32 },
-    { projectId: "proj-3", name: "Mobile App", pct: 0.23 },
-  ];
+  const projs = DEMO_PROJECTS.map(p => ({ projectId: p.id, name: p.name, pct: p.pct }));
 
   const build = (labels: string[], weights: number[], totalCost: number, totalTokens: number, agentKey: "today" | "mtd" | "allTime", tokenKey: "today" | "mtd" | "allTime") => {
     const wSum = weights.reduce((s, v) => s + v, 0);

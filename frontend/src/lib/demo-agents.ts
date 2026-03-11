@@ -117,6 +117,16 @@ export const DEMO_TOTALS = {
   },
 };
 
+// Projects — costs sum to allTime total
+export const DEMO_PROJECTS = [
+  { id: "proj-1", name: "ClaWatch", cost: 300.00 },
+  { id: "proj-2", name: "Customer Support Bot", cost: 450.00 },
+  { id: "proj-3", name: "Sales Pipeline Automation", cost: 380.00 },
+  { id: "proj-4", name: "Code Review Assistant", cost: 420.00 },
+  { id: "proj-5", name: "Documentation Generator", cost: 520.00 },
+  { id: "proj-6", name: "Slack Integration", cost: +(DEMO_TOTALS.allTime - 300 - 450 - 380 - 420 - 520) },
+].map(p => ({ ...p, pct: p.cost / DEMO_TOTALS.allTime }));
+
 // Model distribution (claude-sonnet: 65%, haiku: 25%, gpt-4o: 10%)
 export const DEMO_MODELS = {
   byModel: [

@@ -1,5 +1,5 @@
 import { Agent, Alert, AlertDetails, AlertRelatedError, CostData, Session, SessionDetail, SessionMessage, Project, ProjectDetail, TimelineMessage } from "./types";
-import { DEMO_AGENTS, DEMO_TOTALS, DEMO_MODELS } from "./demo-agents";
+import { DEMO_AGENTS, DEMO_TOTALS, DEMO_MODELS, DEMO_PROJECTS } from "./demo-agents";
 
 const now = new Date();
 const minutesAgo = (m: number) => new Date(now.getTime() - m * 60000).toISOString();
@@ -148,11 +148,13 @@ export const mockCosts: CostData = {
     tokenCount: a.tokens.allTime,
   })),
   byModel: DEMO_MODELS.byModel,
-  byProject: [
-    { projectId: "proj-1", name: "ClaWatch", costUsd: +(DEMO_TOTALS.allTime * 0.45).toFixed(2), tokenCount: Math.floor(DEMO_TOTALS.tokens.allTime * 0.45), sessionCount: 18 },
-    { projectId: "proj-2", name: "Auth Service", costUsd: +(DEMO_TOTALS.allTime * 0.32).toFixed(2), tokenCount: Math.floor(DEMO_TOTALS.tokens.allTime * 0.32), sessionCount: 14 },
-    { projectId: "proj-3", name: "Mobile App", costUsd: +(DEMO_TOTALS.allTime * 0.23).toFixed(2), tokenCount: Math.floor(DEMO_TOTALS.tokens.allTime * 0.23), sessionCount: 10 },
-  ],
+  byProject: DEMO_PROJECTS.map((p, i) => ({
+    projectId: p.id,
+    name: p.name,
+    costUsd: +p.cost.toFixed(2),
+    tokenCount: Math.floor(DEMO_TOTALS.tokens.allTime * p.pct),
+    sessionCount: 5 + i * 2,
+  })),
   daily: (() => {
     // Fixed percentages of MTD spend — no Math.random(), stable on every render
     const pcts = [0.12, 0.15, 0.11, 0.17, 0.14, 0.16, 0.15];
@@ -306,26 +308,22 @@ export const mockSessions: Session[] = [
   },
 ];
 
-export const mockProjects: Project[] = [
-  {
-    id: "project-1",
-    name: "Building ClaWatch",
-    description: "Full-stack AI observability platform with real-time monitoring, session tracking, and cost analytics",
-    createdAt: hoursAgo(48),
-    updatedAt: minutesAgo(5),
-    sessionCount: 3,
-    totalCostUsd: +(DEMO_TOTALS.allTime * 0.45).toFixed(2),
-  },
-  {
-    id: "project-2",
-    name: "Bug Fixes Sprint",
-    description: "Critical bug fixes for authentication, database schema, and CI pipeline issues",
-    createdAt: hoursAgo(24),
-    updatedAt: minutesAgo(30),
-    sessionCount: 2,
-    totalCostUsd: +(DEMO_TOTALS.allTime * 0.32).toFixed(2),
-  },
-];
+export const mockProjects: Project[] = DEMO_PROJECTS.map((p, i) => ({
+  id: p.id,
+  name: p.name,
+  description: [
+    "Full-stack AI observability platform with real-time monitoring, session tracking, and cost analytics",
+    "Automated customer support with AI-powered ticket routing and response generation",
+    "Lead scoring, pipeline automation, and CRM integration powered by AI agents",
+    "Automated PR reviews with code quality analysis, security scanning, and style enforcement",
+    "AI-driven documentation generation from code, APIs, and architecture diagrams",
+    "Slack bot integration for team notifications, standup automation, and workflow triggers",
+  ][i],
+  createdAt: hoursAgo(48 + i * 24),
+  updatedAt: minutesAgo(5 + i * 15),
+  sessionCount: 3 + i,
+  totalCostUsd: +p.cost.toFixed(2),
+}));
 
 function buildMockTimeline(): TimelineMessage[] {
   const messages: TimelineMessage[] = [];
@@ -376,70 +374,42 @@ function buildMockTimeline(): TimelineMessage[] {
 
 const mockTimeline = buildMockTimeline();
 
-const proj1Cost = +(DEMO_TOTALS.allTime * 0.45).toFixed(2);
-const proj2Cost = +(DEMO_TOTALS.allTime * 0.32).toFixed(2);
+// Generate project details from DEMO_PROJECTS
+export const mockProjectDetails: Record<string, ProjectDetail> = Object.fromEntries(
+  DEMO_PROJECTS.map((proj, pi) => {
+    const cost = +proj.cost.toFixed(2);
+    const tokens = Math.floor(DEMO_TOTALS.tokens.allTime * proj.pct);
+    // Assign 2-3 agents per project (rotating through DEMO_AGENTS)
+    const projAgents = [
+      DEMO_AGENTS[pi % 8],
+      DEMO_AGENTS[(pi + 1) % 8],
+      DEMO_AGENTS[(pi + 3) % 8],
+    ];
+    const agentPcts = [0.50, 0.30, 0.20];
 
-export const mockProjectDetails: Record<string, ProjectDetail> = {
-  "project-1": {
-    id: "project-1",
-    name: "Building ClaWatch",
-    description: "Full-stack AI observability platform with real-time monitoring, session tracking, and cost analytics",
-    stats: {
-      totalCostUsd: proj1Cost,
-      totalTokens: Math.floor(DEMO_TOTALS.tokens.allTime * 0.45),
-      totalMessages: 128,
-      sessionCount: 3,
-      dateRange: { from: hoursAgo(48), to: minutesAgo(5) },
-    },
-    agentBreakdown: [
-      { agentId: "agent-1", costUsd: +(proj1Cost * 0.55).toFixed(2), tokenCount: 3_200_000, messageCount: 78, percentage: 55.0 },
-      { agentId: "agent-3", costUsd: +(proj1Cost * 0.28).toFixed(2), tokenCount: 980_000, messageCount: 32, percentage: 28.0 },
-      { agentId: "agent-2", costUsd: +(proj1Cost * 0.17).toFixed(2), tokenCount: 640_000, messageCount: 18, percentage: 17.0 },
-    ],
-    sessions: [
-      mockSessions.find((s) => s.id === "session-1")!,
-      mockSessions.find((s) => s.id === "session-3")!,
-      mockSessions.find((s) => s.id === "session-8")!,
-    ],
-    timeline: mockTimeline,
-  },
-  "project-2": {
-    id: "project-2",
-    name: "Bug Fixes Sprint",
-    description: "Critical bug fixes for authentication, database schema, and CI pipeline issues",
-    stats: {
-      totalCostUsd: proj2Cost,
-      totalTokens: Math.floor(DEMO_TOTALS.tokens.allTime * 0.32),
-      totalMessages: 60,
-      sessionCount: 2,
-      dateRange: { from: hoursAgo(24), to: minutesAgo(30) },
-    },
-    agentBreakdown: [
-      { agentId: "agent-2", costUsd: +(proj2Cost * 0.62).toFixed(2), tokenCount: 680_000, messageCount: 38, percentage: 62.0 },
-      { agentId: "agent-3", costUsd: +(proj2Cost * 0.38).toFixed(2), tokenCount: 440_000, messageCount: 22, percentage: 38.0 },
-    ],
-    sessions: [
-      mockSessions.find((s) => s.id === "session-2")!,
-      mockSessions.find((s) => s.id === "session-6")!,
-    ],
-    timeline: [
-      { sessionId: "session-2", agentId: "agent-2", id: "tl-b1", role: "user", timestamp: hoursAgo(3), content: "Fix the authentication bug in the user login flow. Users are getting 401 errors after token refresh." },
-      { sessionId: "session-2", agentId: "agent-2", id: "tl-b2", role: "assistant", timestamp: hoursAgo(2.9), content: "I'll investigate the auth flow. Let me check the token refresh logic.", model: "claude-sonnet-4-20250514", costUsd: 0.03 },
-      { sessionId: "session-6", agentId: "agent-3", id: "tl-b3", role: "user", timestamp: hoursAgo(2.8), content: "Debug the failing CI pipeline. Jest tests are timing out on the session module." },
-      { sessionId: "session-2", agentId: "agent-2", id: "tl-b4", role: "tool", timestamp: hoursAgo(2.7), content: "Found: refreshToken() doesn't await the database write before returning new token", toolName: "read" },
-      { sessionId: "session-6", agentId: "agent-3", id: "tl-b5", role: "assistant", timestamp: hoursAgo(2.6), content: "Looking at the CI logs. The Jest timeout suggests an unresolved promise in the test setup.", model: "claude-haiku-4-20250506", costUsd: 0.01 },
-      { sessionId: "session-2", agentId: "agent-2", id: "tl-b6", role: "assistant", timestamp: hoursAgo(2.5), content: "Found the bug: `refreshToken()` returns before the DB write completes. Adding await fixes the race condition.", model: "claude-sonnet-4-20250514", costUsd: 0.05 },
-      { sessionId: "session-6", agentId: "agent-3", id: "tl-b7", role: "tool", timestamp: hoursAgo(2.4), content: "$ jest --verbose\nFAILED: session.test.ts > should persist session data\nTimeout: 5000ms exceeded", toolName: "exec" },
-      { sessionId: "session-6", agentId: "agent-3", id: "tl-b8", role: "assistant", timestamp: hoursAgo(2.2), content: "The test is missing `afterAll` cleanup — the database connection stays open. Adding proper teardown.", model: "claude-haiku-4-20250506", costUsd: 0.02 },
-      { sessionId: "session-2", agentId: "agent-2", id: "tl-b9", role: "tool", timestamp: hoursAgo(2.1), content: "$ npm test -- auth.test.ts\n\nTests: 8 passed, 8 total", toolName: "exec" },
-      { sessionId: "session-6", agentId: "agent-3", id: "tl-b10", role: "tool", timestamp: hoursAgo(2.0), content: "$ jest session.test.ts --verbose\nPASSED: all 6 tests", toolName: "exec" },
-      { sessionId: "session-2", agentId: "agent-2", id: "tl-b11", role: "assistant", timestamp: hoursAgo(1.9), content: "Auth bug fixed and all tests passing. The root cause was a missing await in the token refresh handler.", model: "claude-sonnet-4-20250514", costUsd: 0.03 },
-      { sessionId: "session-6", agentId: "agent-3", id: "tl-b12", role: "assistant", timestamp: hoursAgo(1.8), content: "CI pipeline fixed. Added proper test teardown and increased timeout for integration tests to 10s.", model: "claude-haiku-4-20250506", costUsd: 0.02 },
-    ],
-  },
-};
-
-function buildMockMessages(sessionId: string): SessionMessage[] {
+    return [proj.id, {
+      id: proj.id,
+      name: proj.name,
+      description: mockProjects[pi]?.description || proj.name,
+      stats: {
+        totalCostUsd: cost,
+        totalTokens: tokens,
+        totalMessages: 40 + pi * 20,
+        sessionCount: 3 + pi,
+        dateRange: { from: hoursAgo(48 + pi * 24), to: minutesAgo(5 + pi * 15) },
+      },
+      agentBreakdown: projAgents.map((a, ai) => ({
+        agentId: a.id,
+        costUsd: +(cost * agentPcts[ai]).toFixed(2),
+        tokenCount: Math.floor(tokens * agentPcts[ai]),
+        messageCount: Math.floor((40 + pi * 20) * agentPcts[ai]),
+        percentage: agentPcts[ai] * 100,
+      })),
+      sessions: mockSessions.filter((_, si) => si % DEMO_PROJECTS.length === pi).slice(0, 3),
+      timeline: pi === 0 ? mockTimeline : [],
+    }];
+  })
+);function buildMockMessages(sessionId: string): SessionMessage[] {
   const base = [
     {
       id: `${sessionId}-msg-1`,

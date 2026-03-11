@@ -17,8 +17,9 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'
 // --- Helper: check if a port is free ---
 function isPortFree(port: number): Promise<boolean> {
   return new Promise((resolve) => {
+    // Check on 0.0.0.0 (IPv4) explicitly — must match what Next.js binds to
     const server = net.createServer();
-    server.listen(port, () => {
+    server.listen(port, '0.0.0.0', () => {
       server.close(() => resolve(true));
     });
     server.on('error', () => resolve(false));
@@ -70,6 +71,10 @@ function killAllManagedProcesses(): void {
   }
 
   clearPids();
+
+  // 3. Also kill anything occupying our ports (handles untracked/crashed processes)
+  killProcessOnPort(3001, 'SIGTERM');
+  killProcessOnPort(3456, 'SIGTERM');
 }
 
 // --- Helper: ensure port is available, killing stale ClaWatch processes if needed ---
@@ -148,6 +153,8 @@ program
     // Kill ALL existing ClaWatch processes (daemon + backend + frontend)
     console.log(chalk.blue('Cleaning up previous processes...'));
     killAllManagedProcesses();
+    // Brief pause so OS can release ports after killing processes
+    await new Promise(r => setTimeout(r, 1000));
 
     // Auto-init if needed
     if (!configExists()) {

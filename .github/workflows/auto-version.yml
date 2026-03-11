@@ -1,4 +1,4 @@
-name: Auto Version Bump
+name: Auto Version Bump + Publish
 
 on:
   push:
@@ -10,74 +10,53 @@ permissions:
 jobs:
   version-bump:
     runs-on: ubuntu-latest
-    # Skip if the commit is from this workflow (prevent infinite loop)
-    if: "!contains(github.event.head_commit.message, 'chore(release): bump version to')"
+    # Only run on real commits, skip the version bump commit (prevent infinite loop)
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
 
-      - name: Determine bump type from commit message
-        id: bump
-        run: |
-          MSG="${{ github.event.head_commit.message }}"
-          # Check first line of commit message
-          FIRST_LINE=$(echo "$MSG" | head -1)
-          
-          if echo "$FIRST_LINE" | grep -qiE "^BREAKING CHANGE|^.*!:"; then
-            echo "type=major" >> $GITHUB_OUTPUT
-          elif echo "$FIRST_LINE" | grep -qiE "^feat"; then
-            echo "type=minor" >> $GITHUB_OUTPUT
-          elif echo "$FIRST_LINE" | grep -qiE "^fix|^perf|^refactor"; then
-            echo "type=patch" >> $GITHUB_OUTPUT
-          else
-            echo "type=patch" >> $GITHUB_OUTPUT
-          fi
-          echo "Bump type: $(grep type $GITHUB_OUTPUT | cut -d= -f2)"
-
-      - name: Bump version in cli/package.json
-        id: version
-        run: |
-          cd cli
-          OLD_VERSION=$(node -p "require('./package.json').version")
-          npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
-          NEW_VERSION=$(node -p "require('./package.json').version")
-          echo "old=$OLD_VERSION" >> $GITHUB_OUTPUT
-          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "Bumped: $OLD_VERSION → $NEW_VERSION (${{ steps.bump.outputs.type }})"
-
-      - name: Commit and push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add cli/package.json cli/package-lock.json
-          git commit -m "chore(release): bump version to ${{ steps.version.outputs.new }}"
-          git push
-
-      - name: Create git tag
-        run: |
-          git tag "v${{ steps.version.outputs.new }}"
-          git push origin "v${{ steps.version.outputs.new }}"
-
-      - name: Setup Node.js for npm publish
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
-      - name: Build and publish to npm
+      - name: Determine bump type
+        id: bump
+        run: |
+          FIRST_LINE=$(echo "${{ github.event.head_commit.message }}" | head -1)
+          if echo "$FIRST_LINE" | grep -qiE "^BREAKING CHANGE|^.*!:"; then
+            echo "type=major" >> $GITHUB_OUTPUT
+          elif echo "$FIRST_LINE" | grep -qiE "^feat"; then
+            echo "type=minor" >> $GITHUB_OUTPUT
+          else
+            echo "type=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump version
+        id: version
+        run: |
+          cd cli
+          npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
+          echo "new=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Build CLI
         run: |
           cd cli
           npm ci
           npm run build
-          npm publish --access public
+
+      - name: Publish to npm
+        run: cd cli && npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Deploy to Railway
-        if: env.RAILWAY_TOKEN != ''
+      - name: Commit version bump + tag
         run: |
-          npm i -g @railway/cli
-          railway up --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cli/package.json cli/package-lock.json
+          git commit -m "chore(release): v${{ steps.version.outputs.new }} [skip ci]"
+          git tag "v${{ steps.version.outputs.new }}"
+          git push && git push origin "v${{ steps.version.outputs.new }}"

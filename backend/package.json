@@ -1,6 +1,6 @@
 {
   "name": "clawatch-backend",
-  "version": "1.0.0",
+  "version": "1.0.26",
   "description": "ClaWatch — AI Agent Observability Platform Backend",
   "main": "dist/index.js",
   "scripts": {

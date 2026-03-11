@@ -23,6 +23,8 @@ FROM frontend-deps AS frontend-build
 COPY frontend/ ./frontend/
 # Backend runs on port 3001 inside the container
 ENV BACKEND_URL=http://localhost:3001
+# Show demo data on deployed site (no local OpenClaw data available)
+ENV NEXT_PUBLIC_USE_MOCK=true
 RUN cd frontend && npm run build
 
 # ---- Production image ----

@@ -38,7 +38,8 @@ router.get("/version", (_req: Request, res: Response) => {
   const candidates = [
     path.join(__dirname, "..", "..", "cli", "package.json"),  // dev/source (repo root)
     path.join(__dirname, "..", "..", "package.json"),          // installed npm package (backend/dist -> package root)
-    path.join(__dirname, "..", "package.json"),               // fallback
+    path.join(__dirname, "..", "package.json"),               // fallback (backend's own)
+    path.join(__dirname, "..", "..", "..", "cli", "package.json"), // Docker: /app/backend/dist -> /app/cli/package.json
   ];
   for (const candidate of candidates) {
     try {

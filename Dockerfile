@@ -41,6 +41,9 @@ COPY --from=backend-build /app/backend/dist ./backend/dist
 COPY --from=backend-build /app/backend/node_modules ./backend/node_modules
 COPY --from=backend-build /app/backend/package.json ./backend/
 
+# CLI package.json (version source of truth)
+COPY cli/package.json ./cli/package.json
+
 # Frontend (standalone output)
 COPY --from=frontend-build /app/frontend/.next/standalone ./frontend
 COPY --from=frontend-build /app/frontend/.next/static ./frontend/.next/static

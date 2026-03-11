@@ -38,7 +38,7 @@ export async function getProfiles(): Promise<Profile[]> {
 }
 
 export async function getVersion(): Promise<string | null> {
-  if (USE_MOCK) return null;
+  // Always fetch version from API (even in demo mode)
   try {
     const data = await fetchJson<{ version: string }>("/api/version");
     return data.version;

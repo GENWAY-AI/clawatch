@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile, AnalyticsData, SpendData, CostLimits } from "@/lib/types";
-import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics, getSpend, setCostLimits } from "@/lib/api";
+import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics, getSpend, setCostLimits, isUsingMockData } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 
@@ -453,6 +453,7 @@ function DashboardContent() {
   const [hiddenAgentSeries, setHiddenAgentSeries] = useState<Set<string>>(new Set());
   const [hiddenProjectSeries, setHiddenProjectSeries] = useState<Set<string>>(new Set());
   const [spendData, setSpendData] = useState<SpendData | null>(null);
+  const [showingDemoData, setShowingDemoData] = useState(false);
   const [showCostSettings, setShowCostSettings] = useState(false);
 
   const selectedProfile = searchParams.get("profile") || "default";
@@ -601,6 +602,7 @@ function DashboardContent() {
       setSessionsTotal(sessResult.total);
       setProjects(p);
       setSpendData(sp);
+      setShowingDemoData(isUsingMockData());
     } finally {
       setLoading(false);
     }
@@ -764,6 +766,17 @@ function DashboardContent() {
         </div>
       </nav>
 
+      {showingDemoData && (
+        <div className="max-w-7xl mx-auto px-6 pt-4">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <span className="text-amber-400 text-lg">⚠️</span>
+            <div>
+              <span className="text-amber-400 font-medium text-sm">Demo Mode</span>
+              <span className="text-amber-400/70 text-sm ml-2">Showing sample data — backend is unreachable or mock mode is enabled.</span>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Stats Overview */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

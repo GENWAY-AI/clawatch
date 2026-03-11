@@ -256,13 +256,75 @@ router.get("/costs", async (req: Request, res: Response) => {
       }
     }
 
+    // By project
+    const projectTags = bulkGetSessionProjects(sessions.map(s => s.id));
+    const projectMap = new Map<string, { projectId: string; name: string; costUsd: number; tokenCount: number; sessionCount: number }>();
+    for (const session of sessions) {
+      const projects = projectTags.get(session.id) || [];
+      for (const p of projects) {
+        const ep = projectMap.get(p.id);
+        if (ep) {
+          ep.costUsd += session.costUsd;
+          ep.tokenCount += session.tokenCount;
+          ep.sessionCount += 1;
+        } else {
+          projectMap.set(p.id, { projectId: p.id, name: p.name, costUsd: session.costUsd, tokenCount: session.tokenCount, sessionCount: 1 });
+        }
+      }
+    }
+
+    // Daily breakdown
+    const dailyMap = new Map<string, { date: string; costUsd: number; tokenCount: number; sessionCount: number }>();
+    for (const session of sessions) {
+      const date = session.startedAt.slice(0, 10);
+      const ed = dailyMap.get(date);
+      if (ed) {
+        ed.costUsd += session.costUsd;
+        ed.tokenCount += session.tokenCount;
+        ed.sessionCount += 1;
+      } else {
+        dailyMap.set(date, { date, costUsd: session.costUsd, tokenCount: session.tokenCount, sessionCount: 1 });
+      }
+    }
+
     const byAgent = Array.from(agentMap.values()).sort((a, b) => b.costUsd - a.costUsd);
     const byModel = Array.from(modelMap.values()).sort((a, b) => b.costUsd - a.costUsd);
+    const byProject = Array.from(projectMap.values()).sort((a, b) => b.costUsd - a.costUsd);
+    const daily = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
     const totalUsd = byAgent.reduce((sum, a) => sum + a.costUsd, 0);
+    const totalTokens = byAgent.reduce((sum, a) => sum + a.tokenCount, 0);
 
-    res.json({ totalUsd, byAgent, byModel });
+    res.json({ totalUsd, totalTokens, sessionCount: sessions.length, byAgent, byModel, byProject, daily });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to get costs" });
+  }
+});
+
+// ---------- Costs CSV Export ----------
+
+router.get("/costs/export", async (req: Request, res: Response) => {
+  try {
+    const { profile } = req.query;
+    let sessions = await listSessions(profile as string | undefined);
+
+    // Sort by date desc
+    sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+
+    const projectTags = bulkGetSessionProjects(sessions.map(s => s.id));
+
+    const header = "Date,Agent,Session,Cost (USD),Tokens,Model,Projects\n";
+    const rows = sessions.map(s => {
+      const projects = (projectTags.get(s.id) || []).map(p => p.name).join("; ");
+      const models = s.costByModel.map(m => m.model).join("; ");
+      const title = (s.title || "").replace(/"/g, '""').slice(0, 100);
+      return `${s.startedAt.slice(0, 10)},${s.agentId},"${title}",${s.costUsd.toFixed(4)},${s.tokenCount},${models},"${projects}"`;
+    }).join("\n");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="clawatch-costs-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(header + rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to export costs" });
   }
 });
 

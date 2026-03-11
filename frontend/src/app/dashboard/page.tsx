@@ -454,6 +454,7 @@ function DashboardContent() {
   const [hiddenProjectSeries, setHiddenProjectSeries] = useState<Set<string>>(new Set());
   const [spendData, setSpendData] = useState<SpendData | null>(null);
   const [showCostSettings, setShowCostSettings] = useState(false);
+  const [showAlertPanel, setShowAlertPanel] = useState(false);
 
   const selectedProfile = searchParams.get("profile") || "default";
   const analyticsGroupBy = (searchParams.get("groupBy") as "hour" | "day" | "week") || "day";
@@ -863,12 +864,7 @@ function DashboardContent() {
           </Card>
           <Card
             className="cursor-pointer hover:border-emerald-500/30 transition-colors"
-            onClick={() => {
-              setTab("agents");
-              setTimeout(() => {
-                document.getElementById("alerts-section")?.scrollIntoView({ behavior: "smooth" });
-              }, 100);
-            }}
+            onClick={() => setShowAlertPanel(true)}
           >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Active Alerts</CardTitle>

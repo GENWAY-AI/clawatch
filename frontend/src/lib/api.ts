@@ -348,6 +348,7 @@ export async function getAnalytics(params: {
 const mockSpendData: SpendData = {
   today: 94.72,
   mtd: 236.83,
+  allTime: 1842.57,
   byAgent: {
     anas: { today: 36.21, mtd: 69.12 },
     ofek: { today: 42.83, mtd: 112.18 },

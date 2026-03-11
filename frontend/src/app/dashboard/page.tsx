@@ -875,7 +875,6 @@ function DashboardContent() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">${spendData?.allTime?.toFixed(2) ?? totalCost.toFixed(2)}</div>
-              <div className="text-sm text-muted-foreground mt-1">All time</div>
             </CardContent>
           </Card>
           <Card

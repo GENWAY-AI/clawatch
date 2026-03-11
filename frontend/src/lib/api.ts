@@ -296,7 +296,7 @@ const mockAnalytics: AnalyticsData = (() => {
     tokenCount: Math.floor(1_000_000 + Math.random() * 4_000_000),
     sessionCount: Math.floor(3 + Math.random() * 10),
   }));
-  const agentIds = ["ofek", "anas", "dor"];
+  const agentIds = ["code-reviewer", "deploy-bot", "data-pipeline", "customer-support", "doc-generator", "slack-responder"];
   const byAgent = agentIds.map((agentId) => ({
     agentId,
     buckets: dates.map((date) => ({

@@ -120,12 +120,12 @@ export const DEMO_TOTALS = {
 // Projects — costs sum to allTime total
 // Projects sum to $1,842.00
 export const DEMO_PROJECTS = [
-  { id: "proj-1", name: "ClaWatch", cost: 300.00 },
-  { id: "proj-2", name: "Customer Support Bot", cost: 342.00 },
-  { id: "proj-3", name: "Sales Pipeline Automation", cost: 285.00 },
-  { id: "proj-4", name: "Code Review Assistant", cost: 320.00 },
-  { id: "proj-5", name: "Documentation Generator", cost: 380.00 },
-  { id: "proj-6", name: "Slack Integration", cost: 215.57 },
+  { id: "proj-1", name: "ClaWatch", cost: 297.43 },
+  { id: "proj-2", name: "Customer Support Bot", cost: 341.82 },
+  { id: "proj-3", name: "Sales Pipeline Automation", cost: 287.19 },
+  { id: "proj-4", name: "Code Review Assistant", cost: 319.54 },
+  { id: "proj-5", name: "Documentation Generator", cost: 381.28 },
+  { id: "proj-6", name: "Slack Integration", cost: 215.31 },
 ].map(p => ({ ...p, pct: p.cost / DEMO_TOTALS.allTime }));
 
 // Model distribution (claude-sonnet: 65%, haiku: 25%, gpt-4o: 10%)

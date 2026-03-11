@@ -1,5 +1,3 @@
-import { useId } from "react";
-
 export function ClaWatchLogo({ size = "md" }: { size?: "sm" | "md" | "lg" | "xl" }) {
   const sizeClasses = {
     sm: "text-lg",
@@ -21,196 +19,27 @@ export function ClaWatchLogo({ size = "md" }: { size?: "sm" | "md" | "lg" | "xl"
   );
 }
 
-export function ClaWatchOwl({ size = 130 }: { size?: number }) {
-  const uid = useId().replace(/:/g, "");
-  const bgId = `bg-${uid}`;
-  const glowId = `glow-${uid}`;
-  const sgId = `sg-${uid}`;
-  const clipId = `clip-${uid}`;
-
-  // Scoped animation names
-  const sweep = `sweep-${uid}`;
-  const dotOn = `dotOn-${uid}`;
-  const ringOut = `ringOut-${uid}`;
-  const eyePulse = `eyePulse-${uid}`;
-  const blink = `blink-${uid}`;
-
-  // Scoped class names
-  const sweepGroup = `sweep-group-${uid}`;
-  const p1Dot = `p1-dot-${uid}`;
-  const p1Ring = `p1-ring-${uid}`;
-  const p2Dot = `p2-dot-${uid}`;
-  const p2Ring = `p2-ring-${uid}`;
-  const eyeL = `eye-l-${uid}`;
-  const eyeR = `eye-r-${uid}`;
-  const sensor1 = `sensor1-${uid}`;
-  const sensor2 = `sensor2-${uid}`;
-
+export function ClaWatchIcon({ className = "size-7" }: { className?: string }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 130 130"
-      xmlns="http://www.w3.org/2000/svg"
-      role="img"
-      aria-label="ClaWatch owl logo"
-    >
-      <style>{`
-        @keyframes ${sweep} { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .${sweepGroup} { transform-origin: 65px 65px; animation: ${sweep} 4s linear infinite; }
-
-        @keyframes ${dotOn} {
-          0%   { opacity: 1; }
-          18%  { opacity: 0.15; }
-          100% { opacity: 0.1; }
-        }
-        @keyframes ${ringOut} {
-          0%   { opacity: 0.7; transform: scale(1); }
-          60%  { opacity: 0; transform: scale(3.2); }
-          100% { opacity: 0; transform: scale(3.2); }
-        }
-        @keyframes ${eyePulse} {
-          0%,100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-        @keyframes ${blink} {
-          0%,88%,100% { opacity: 1; }
-          94% { opacity: 0.05; }
-        }
-
-        .${p1Dot}  { animation: ${dotOn} 4s linear infinite; animation-delay: -3.5s; }
-        .${p1Ring} { animation: ${ringOut} 4s linear infinite; animation-delay: -3.5s; transform-origin: 0px 0px; }
-        .${p2Dot}  { animation: ${dotOn} 4s linear infinite; animation-delay: -1.43s; }
-        .${p2Ring} { animation: ${ringOut} 4s linear infinite; animation-delay: -1.43s; transform-origin: 0px 0px; }
-
-        .${eyeL}   { animation: ${eyePulse} 2s ease-in-out infinite; }
-        .${eyeR}   { animation: ${eyePulse} 2s ease-in-out infinite 0.3s; }
-        .${sensor1} { animation: ${blink} 2.5s ease-in-out infinite; }
-        .${sensor2} { animation: ${blink} 2.5s ease-in-out infinite 0.5s; }
-      `}</style>
-      <defs>
-        <radialGradient id={bgId} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#001820" />
-          <stop offset="100%" stopColor="#000A0D" />
-        </radialGradient>
-        <filter id={glowId}>
-          <feGaussianBlur stdDeviation="2" result="b" />
-          <feMerge>
-            <feMergeNode in="b" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <filter id={sgId}>
-          <feGaussianBlur stdDeviation="1.2" result="b" />
-          <feMerge>
-            <feMergeNode in="b" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <clipPath id={clipId}>
-          <circle cx="65" cy="65" r="62" />
-        </clipPath>
-      </defs>
-
-      {/* Background */}
-      <circle cx="65" cy="65" r="65" fill={`url(#${bgId})`} />
-
-      {/* Radar rings */}
-      <circle cx="65" cy="65" r="55" fill="none" stroke="#00ff4408" strokeWidth="0.8" />
-      <circle cx="65" cy="65" r="44" fill="none" stroke="#00ff4412" strokeWidth="0.8" />
-      <circle cx="65" cy="65" r="33" fill="none" stroke="#00ff441a" strokeWidth="0.8" />
-      <circle cx="65" cy="65" r="22" fill="none" stroke="#00ff4422" strokeWidth="0.8" />
-      <circle cx="65" cy="65" r="11" fill="none" stroke="#00ff4430" strokeWidth="0.8" />
-      <line x1="65" y1="5" x2="65" y2="125" stroke="#00ff4410" strokeWidth="0.6" />
-      <line x1="5" y1="65" x2="125" y2="65" stroke="#00ff4410" strokeWidth="0.6" />
-
-      {/* Sweep */}
-      <g clipPath={`url(#${clipId})`}>
-        <g className={sweepGroup}>
-          <path d="M65 65 L65 10 A55 55 0 0 1 116 80 Z" fill="#00ff4407" />
-          <path d="M65 65 L65 10 A55 55 0 0 1 108 92 Z" fill="#00ff4404" />
-          <line x1="65" y1="65" x2="65" y2="10" stroke="#00FF88" strokeWidth="1.2" opacity="0.7" filter={`url(#${glowId})`} />
-        </g>
-      </g>
-
-      {/* Radar blips */}
-      <g transform="translate(92,38)">
-        <circle className={p1Ring} r="2.5" fill="none" stroke="#00FF88" strokeWidth="0.8" />
-        <circle className={p1Dot} r="2.5" fill="#00FF88" filter={`url(#${glowId})`} />
-      </g>
-      <g transform="translate(40,85)">
-        <circle className={p2Ring} r="2" fill="none" stroke="#00FF88" strokeWidth="0.8" />
-        <circle className={p2Dot} r="2" fill="#00FF88" filter={`url(#${glowId})`} />
-      </g>
-
-      {/* Owl body */}
-      <ellipse cx="65" cy="82" rx="19" ry="21" fill="#0B3D2A" />
-      <ellipse cx="65" cy="82" rx="12" ry="15" fill="#0E4D34" />
-      <ellipse cx="65" cy="101" rx="11" ry="5.5" fill="#0A3828" />
-      <ellipse cx="65" cy="109" rx="7.5" ry="4.5" fill="#083020" />
-      <path d="M57 115 Q65 122 73 115" fill="#072818" stroke="#0A3828" strokeWidth="0.5" />
-
-      {/* Head */}
-      <ellipse cx="65" cy="60" rx="18" ry="17" fill="#0E4D34" stroke="#00FF88" strokeWidth="0.8" filter={`url(#${sgId})`} />
-
-      {/* Eyes */}
-      <ellipse cx="57" cy="57" rx="5.5" ry="5.5" fill="#001A10" stroke="#00FF88" strokeWidth="1.2" filter={`url(#${sgId})`} />
-      <ellipse cx="73" cy="57" rx="5.5" ry="5.5" fill="#001A10" stroke="#00FF88" strokeWidth="1.2" filter={`url(#${sgId})`} />
-      <circle className={eyeL} cx="57" cy="57" r="3" fill="#00FF88" filter={`url(#${glowId})`} />
-      <circle className={eyeR} cx="73" cy="57" r="3" fill="#00FF88" filter={`url(#${glowId})`} />
-      <circle cx="57" cy="57" r="1.4" fill="#000D08" />
-      <circle cx="73" cy="57" r="1.4" fill="#000D08" />
-
-      {/* Antennae */}
-      <line x1="58" y1="45" x2="49" y2="28" stroke="#0E4D34" strokeWidth="2" strokeLinecap="round" />
-      <line x1="72" y1="45" x2="81" y2="28" stroke="#0E4D34" strokeWidth="2" strokeLinecap="round" />
-      <circle className={sensor1} cx="49" cy="27" r="3.5" fill="#00FF88" filter={`url(#${glowId})`} />
-      <circle className={sensor1} cx="49" cy="27" r="5.5" fill="none" stroke="#00FF88" strokeWidth="0.6" opacity="0.35" />
-      <circle className={sensor2} cx="81" cy="27" r="3.5" fill="#00FF88" filter={`url(#${glowId})`} />
-      <circle className={sensor2} cx="81" cy="27" r="5.5" fill="none" stroke="#00FF88" strokeWidth="0.6" opacity="0.35" />
-
-      {/* Right wing */}
-      <g transform="translate(84,71) rotate(-18)">
-        <path d="M0,-3.5 Q8,-4.5 13,-3 Q13,3 8,4.5 Q0,3.5 0,-3.5 Z" fill="#0A3826" stroke="#00ff8825" strokeWidth="0.5" />
-        <path d="M11,-3.5 Q16,-6 20,-4.5 Q22,-1.5 20,1 Q16,4 11,3 Q9,1 9,-1.5 Z" fill="#0B4030" stroke="#00ff8830" strokeWidth="0.6" />
-        <path d="M18,-4 Q26,-10 34,-8 Q40,-5 40,0 Q40,5 34,8 Q26,10 18,4 Q15,2 15,-2 Z" fill="#0E4D34" stroke="#00ff8842" strokeWidth="0.9" />
-        <path d="M20,-2 Q28,-6 34,-4 Q37,-1.5 37,0 Q37,1.5 34,4 Q28,6 20,2 Q18,0 18,-1 Z" fill="#0C4531" opacity="0.6" />
-        <path d="M32,-7.5 Q37,-14 46,-11.5 Q50,-8 47,-5 Q43,-5.5 38,-5 Q34,-4.5 31,-5.5 Z" fill="#0C4832" stroke="#00ff8828" strokeWidth="0.6" />
-        <path d="M44,-10 Q48,-8 47,-5 Q45,-6 43,-7 Z" fill="#0A3D28" />
-        <path d="M32,7.5 Q37,14 45,11.5 Q49,8 46,5 Q42,5.5 37,5 Q33,4.5 31,5.5 Z" fill="#0C4832" stroke="#00ff8828" strokeWidth="0.6" />
-        <path d="M43,10 Q47,8 46,5 Q44,6 42,7 Z" fill="#0A3D28" />
-        <path d="M30,-4 Q38,-1 38,0 Q38,1 30,4" fill="none" stroke="#041810" strokeWidth="1.5" strokeLinecap="round" />
-      </g>
-
-      {/* Left wing (mirrored) */}
-      <g transform="translate(46,71) scale(-1,1) rotate(-18)">
-        <path d="M0,-3.5 Q8,-4.5 13,-3 Q13,3 8,4.5 Q0,3.5 0,-3.5 Z" fill="#0A3826" stroke="#00ff8825" strokeWidth="0.5" />
-        <path d="M11,-3.5 Q16,-6 20,-4.5 Q22,-1.5 20,1 Q16,4 11,3 Q9,1 9,-1.5 Z" fill="#0B4030" stroke="#00ff8830" strokeWidth="0.6" />
-        <path d="M18,-4 Q26,-10 34,-8 Q40,-5 40,0 Q40,5 34,8 Q26,10 18,4 Q15,2 15,-2 Z" fill="#0E4D34" stroke="#00ff8842" strokeWidth="0.9" />
-        <path d="M20,-2 Q28,-6 34,-4 Q37,-1.5 37,0 Q37,1.5 34,4 Q28,6 20,2 Q18,0 18,-1 Z" fill="#0C4531" opacity="0.6" />
-        <path d="M32,-7.5 Q37,-14 46,-11.5 Q50,-8 47,-5 Q43,-5.5 38,-5 Q34,-4.5 31,-5.5 Z" fill="#0C4832" stroke="#00ff8828" strokeWidth="0.6" />
-        <path d="M44,-10 Q48,-8 47,-5 Q45,-6 43,-7 Z" fill="#0A3D28" />
-        <path d="M32,7.5 Q37,14 45,11.5 Q49,8 46,5 Q42,5.5 37,5 Q33,4.5 31,5.5 Z" fill="#0C4832" stroke="#00ff8828" strokeWidth="0.6" />
-        <path d="M43,10 Q47,8 46,5 Q44,6 42,7 Z" fill="#0A3D28" />
-        <path d="M30,-4 Q38,-1 38,0 Q38,1 30,4" fill="none" stroke="#041810" strokeWidth="1.5" strokeLinecap="round" />
-      </g>
-
-      {/* Feet */}
-      <line x1="49" y1="87" x2="37" y2="97" stroke="#0B3D2A" strokeWidth="2.2" strokeLinecap="round" />
-      <line x1="49" y1="94" x2="39" y2="104" stroke="#0B3D2A" strokeWidth="2" strokeLinecap="round" />
-      <line x1="81" y1="87" x2="93" y2="97" stroke="#0B3D2A" strokeWidth="2.2" strokeLinecap="round" />
-      <line x1="81" y1="94" x2="91" y2="104" stroke="#0B3D2A" strokeWidth="2" strokeLinecap="round" />
-
-      {/* Outer ring */}
-      <circle cx="65" cy="65" r="63" fill="none" stroke="#00ff4418" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-export function ClaWatchIcon({ className = "size-14" }: { className?: string }) {
-  return (
-    <div className={`${className} flex items-center justify-center`}>
-      <ClaWatchOwl size={56} />
+    <div className={`${className} rounded-lg bg-emerald-500 flex items-center justify-center`}>
+      <svg
+        className="w-[60%] h-[60%] text-white"
+        fill="none"
+        viewBox="0 0 24 24"
+        strokeWidth={2.5}
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.64 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.64 0-8.573-3.007-9.963-7.178z"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        />
+      </svg>
     </div>
   );
 }

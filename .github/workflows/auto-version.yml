@@ -1,0 +1,60 @@
+name: Auto Version Bump
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    # Skip if the commit is from this workflow (prevent infinite loop)
+    if: "!contains(github.event.head_commit.message, 'chore: bump version to')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine bump type from commit message
+        id: bump
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          # Check first line of commit message
+          FIRST_LINE=$(echo "$MSG" | head -1)
+          
+          if echo "$FIRST_LINE" | grep -qiE "^BREAKING CHANGE|^.*!:"; then
+            echo "type=major" >> $GITHUB_OUTPUT
+          elif echo "$FIRST_LINE" | grep -qiE "^feat"; then
+            echo "type=minor" >> $GITHUB_OUTPUT
+          elif echo "$FIRST_LINE" | grep -qiE "^fix|^perf|^refactor"; then
+            echo "type=patch" >> $GITHUB_OUTPUT
+          else
+            echo "type=patch" >> $GITHUB_OUTPUT
+          fi
+          echo "Bump type: $(grep type $GITHUB_OUTPUT | cut -d= -f2)"
+
+      - name: Bump version in cli/package.json
+        id: version
+        run: |
+          cd cli
+          OLD_VERSION=$(node -p "require('./package.json').version")
+          npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "old=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumped: $OLD_VERSION → $NEW_VERSION (${{ steps.bump.outputs.type }})"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cli/package.json cli/package-lock.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+          git push
+
+      - name: Create git tag
+        run: |
+          git tag "v${{ steps.version.outputs.new }}"
+          git push origin "v${{ steps.version.outputs.new }}"

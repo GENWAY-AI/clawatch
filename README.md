@@ -9,7 +9,6 @@
   
   [![npm version](https://img.shields.io/npm/v/clawatch.svg?style=flat&color=00C853)](https://www.npmjs.com/package/clawatch)
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](https://opensource.org/licenses/MIT)
-  [![Deploy on Railway](https://img.shields.io/badge/Deploy%20on-Railway-blueviolet?style=flat&logo=railway)](https://railway.app/template/clawatch)
   
   [**🚀 Live Demo**](https://clawatch.dev/dashboard) · [**📦 npm**](https://www.npmjs.com/package/clawatch) · [**⭐ Star on GitHub**](https://github.com/GENWAY-AI/clawatch)
 </div>
@@ -179,15 +178,9 @@ Get notified where your team already works.
 
 ---
 
-## 🌐 Deploy to Production
+## 🐳 Self-Host with Docker
 
-### One-Click Deploy
-
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/clawatch)
-
-Railway auto-configures everything: backend, dashboard, persistent SQLite storage. Free tier available.
-
-### Manual Docker Deploy
+Want to run ClaWatch on a remote server? Use Docker:
 
 ```bash
 git clone https://github.com/GENWAY-AI/clawatch.git
@@ -196,7 +189,7 @@ docker build -t clawatch .
 docker run -p 3001:3001 -e TELEGRAM_BOT_TOKEN=xxx clawatch
 ```
 
-Supports **Railway, Render, Fly.io, AWS, GCP, Azure, Hetzner** — anywhere Docker runs.
+Supports any platform with Docker: **AWS, GCP, Azure, Hetzner, Digital Ocean, Render, Fly.io**.
 
 ---
 
@@ -278,7 +271,7 @@ clawatch/
 - [x] Multi-profile support
 - [x] Session logs & project grouping
 - [x] Agent control (pause/resume)
-- [x] Railway one-click deploy
+- [x] Docker support for self-hosting
 - [x] Pure WASM SQLite (no native deps)
 
 ### 🚧 In Progress

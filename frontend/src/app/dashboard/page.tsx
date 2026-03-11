@@ -785,9 +785,14 @@ function DashboardContent() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Agents</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{totalAgentCount}</div>
-              <div className="text-sm text-muted-foreground mt-1">
-                <span className={runningCount > 0 ? "text-emerald-400" : ""}>{runningCount} running</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-bold">{totalAgentCount}</span>
+                {runningCount > 0 && (
+                  <span className="text-sm font-medium text-emerald-400">{runningCount} running</span>
+                )}
+                {runningCount === 0 && (
+                  <span className="text-sm text-muted-foreground">0 running</span>
+                )}
               </div>
             </CardContent>
           </Card>

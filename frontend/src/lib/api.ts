@@ -285,73 +285,94 @@ export async function removeSessionProject(sessionId: string, projectId: string)
   });
 }
 
-// Analytics mock — all derived from DEMO_TOTALS, no Math.random()
-const mockAnalytics: AnalyticsData = (() => {
-  const dates = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date("2026-02-24");
-    d.setDate(d.getDate() + i);
-    return d.toISOString().slice(0, 10);
-  });
-
-  // Fixed daily weights — deterministic, sums to ~1.0
-  const w = [0.06, 0.07, 0.065, 0.08, 0.072, 0.068, 0.075, 0.073, 0.071, 0.082, 0.069, 0.076, 0.074, 0.065];
-  const wTotal = w.reduce((s, v) => s + v, 0);
-
-  // Total buckets — each day is a fraction of allTime
-  const buckets = dates.map((date, i) => {
-    const pct = w[i] / wTotal;
-    return {
-      date,
-      costUsd: +(DEMO_TOTALS.allTime * pct).toFixed(2),
-      tokenCount: Math.floor(DEMO_TOTALS.tokens.allTime * pct),
-      sessionCount: 3 + (i % 5),
-    };
-  });
-
-  // Per-agent — each agent's allTime distributed across days
-  const byAgent = DEMO_AGENTS.filter(a => a.spend.allTime > 50).map((agent) => ({
-    agentId: agent.name,
-    buckets: dates.map((date, i) => {
-      const pct = w[i] / wTotal;
-      return {
-        date,
-        costUsd: +(agent.spend.allTime * pct).toFixed(2),
-        tokenCount: Math.floor(agent.tokens.allTime * pct),
-        sessionCount: 1 + (i % 3),
-      };
-    }),
-  }));
-
-  // Per-project — 45/32/23% split of allTime across days
-  const projSplits = [
+// Analytics mock — generates hourly/daily/weekly data from DEMO_TOTALS
+// Hours: 24h of today's spend, lower at night (01:00-07:00)
+// Days: 14 days of MTD-scale spend
+// Weeks: 8 weeks of allTime spend
+function buildMockAnalytics(groupBy: string): AnalyticsData {
+  const agents = DEMO_AGENTS.filter(a => a.spend.allTime > 50);
+  const projs = [
     { projectId: "proj-1", name: "ClaWatch", pct: 0.45 },
     { projectId: "proj-2", name: "Auth Service", pct: 0.32 },
     { projectId: "proj-3", name: "Mobile App", pct: 0.23 },
   ];
-  const byProject = projSplits.map(({ projectId, name, pct }) => ({
-    projectId,
-    name,
-    buckets: dates.map((date, i) => {
-      const dayPct = w[i] / wTotal;
-      return {
+
+  const build = (labels: string[], weights: number[], totalCost: number, totalTokens: number, agentKey: "today" | "mtd" | "allTime", tokenKey: "today" | "mtd" | "allTime") => {
+    const wSum = weights.reduce((s, v) => s + v, 0);
+    return {
+      buckets: labels.map((date, i) => ({
         date,
-        costUsd: +(DEMO_TOTALS.allTime * pct * dayPct).toFixed(2),
-        tokenCount: Math.floor(DEMO_TOTALS.tokens.allTime * pct * dayPct),
-        sessionCount: 1 + (i % 3),
-      };
-    }),
-  }));
+        costUsd: +(totalCost * weights[i] / wSum).toFixed(2),
+        tokenCount: Math.floor(totalTokens * weights[i] / wSum),
+        sessionCount: weights[i] > 0.04 ? 3 + (i % 5) : 1 + (i % 2),
+      })),
+      byAgent: agents.map(a => ({
+        agentId: a.name,
+        buckets: labels.map((date, i) => ({
+          date,
+          costUsd: +(a.spend[agentKey] * weights[i] / wSum).toFixed(2),
+          tokenCount: Math.floor(a.tokens[tokenKey] * weights[i] / wSum),
+          sessionCount: weights[i] > 0.04 ? 1 + (i % 3) : i % 3 === 0 ? 1 : 0,
+        })),
+      })),
+      byProject: projs.map(({ projectId, name, pct }) => ({
+        projectId,
+        name,
+        buckets: labels.map((date, i) => ({
+          date,
+          costUsd: +(totalCost * pct * weights[i] / wSum).toFixed(2),
+          tokenCount: Math.floor(totalTokens * pct * weights[i] / wSum),
+          sessionCount: weights[i] > 0.04 ? 1 + (i % 2) : 0,
+        })),
+      })),
+    };
+  };
 
-  return { buckets, byAgent, byProject };
-})();
+  if (groupBy === "hour") {
+    const labels = Array.from({ length: 24 }, (_, i) => {
+      const d = new Date(); d.setHours(i, 0, 0, 0);
+      return d.toISOString().slice(0, 13) + ":00";
+    });
+    // Night hours (01-07) are much lower — realistic work pattern
+    const w = [
+      0.020, 0.005, 0.003, 0.003, 0.003, 0.005, 0.008, 0.020,
+      0.040, 0.060, 0.070, 0.075, 0.065, 0.070, 0.075, 0.070,
+      0.065, 0.060, 0.055, 0.050, 0.040, 0.035, 0.030, 0.025,
+    ];
+    return build(labels, w, DEMO_TOTALS.today, DEMO_TOTALS.tokens.today, "today", "today");
+  }
 
+  if (groupBy === "week") {
+    const labels = Array.from({ length: 8 }, (_, i) => {
+      const d = new Date("2026-01-13"); d.setDate(d.getDate() + i * 7);
+      return d.toISOString().slice(0, 10);
+    });
+    // Gradual ramp-up over 8 weeks
+    const w = [0.08, 0.09, 0.10, 0.11, 0.12, 0.13, 0.17, 0.20];
+    return build(labels, w, DEMO_TOTALS.allTime, DEMO_TOTALS.tokens.allTime, "allTime", "allTime");
+  }
+
+  // Default: "day" — 14 daily buckets
+  const labels = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date("2026-02-24"); d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+  const w = [0.060, 0.070, 0.065, 0.080, 0.072, 0.068, 0.075, 0.073, 0.071, 0.082, 0.069, 0.076, 0.074, 0.065];
+  return build(labels, w, DEMO_TOTALS.mtd, DEMO_TOTALS.tokens.mtd, "mtd", "mtd");
+}
+
+const mockAnalyticsByGroup: Record<string, AnalyticsData> = {
+  hour: buildMockAnalytics("hour"),
+  day: buildMockAnalytics("day"),
+  week: buildMockAnalytics("week"),
+};
 export async function getAnalytics(params: {
   profile?: string;
   groupBy?: string;
   from?: string;
   to?: string;
 }): Promise<AnalyticsData> {
-  if (USE_MOCK) return mockAnalytics;
+  if (USE_MOCK) return mockAnalyticsByGroup[params.groupBy || "day"] || mockAnalyticsByGroup.day;
   try {
     const qs = new URLSearchParams();
     if (params.profile) qs.set("profile", params.profile);
@@ -362,7 +383,7 @@ export async function getAnalytics(params: {
     return await fetchJson<AnalyticsData>(`/api/analytics${query ? `?${query}` : ""}`);
   } catch {
     console.warn("API unreachable, falling back to mock analytics data");
-    return mockAnalytics;
+    return mockAnalyticsByGroup[params.groupBy || "day"] || mockAnalyticsByGroup.day;
   }
 }
 

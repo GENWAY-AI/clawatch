@@ -293,16 +293,28 @@ function buildMockAnalytics(groupBy: string): AnalyticsData {
   const agents = DEMO_AGENTS.filter(a => a.spend.allTime > 50);
   const projs = DEMO_PROJECTS.map(p => ({ projectId: p.id, name: p.name, pct: p.pct }));
 
-  const TOTAL_SESSIONS = 42; // consistent across all groupBy modes
+  const TOTAL_SESSIONS = 42; // must be identical across all groupBy modes
+
+  // Distribute an integer total across N buckets proportionally, ensuring exact sum
+  const distribute = (total: number, weights: number[]): number[] => {
+    const wSum = weights.reduce((s, v) => s + v, 0);
+    const raw = weights.map(w => total * w / wSum);
+    const floored = raw.map(v => Math.floor(v));
+    let remainder = total - floored.reduce((s, v) => s + v, 0);
+    const fracs = raw.map((v, i) => ({ i, frac: v - floored[i] })).sort((a, b) => b.frac - a.frac);
+    for (let j = 0; j < remainder; j++) floored[fracs[j].i]++;
+    return floored;
+  };
 
   const build = (labels: string[], weights: number[], totalCost: number, totalTokens: number, agentKey: "today" | "mtd" | "allTime", tokenKey: "today" | "mtd" | "allTime") => {
     const wSum = weights.reduce((s, v) => s + v, 0);
+    const sessionDist = distribute(TOTAL_SESSIONS, weights);
     return {
       buckets: labels.map((date, i) => ({
         date,
         costUsd: +(totalCost * weights[i] / wSum).toFixed(2),
         tokenCount: Math.floor(totalTokens * weights[i] / wSum),
-        sessionCount: Math.max(1, Math.round(TOTAL_SESSIONS * weights[i] / wSum)),
+        sessionCount: sessionDist[i],
       })),
       byAgent: agents.map(a => ({
         agentId: a.name,

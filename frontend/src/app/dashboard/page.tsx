@@ -457,7 +457,53 @@ function DashboardContent() {
   const [showCostSettings, setShowCostSettings] = useState(false);
 
   const selectedProfile = searchParams.get("profile") || "default";
-  const analyticsGroupBy = (searchParams.get("groupBy") as "hour" | "day" | "week") || "day";
+  type TimeWindow = "1h" | "24h" | "7d" | "30d" | "all" | "custom";
+  const timeWindow = (searchParams.get("window") as TimeWindow) || "7d";
+  const customFrom = searchParams.get("from") || "";
+  const customTo = searchParams.get("to") || "";
+
+  const timeWindowConfig: Record<Exclude<TimeWindow, "custom">, { label: string; groupBy: "hour" | "day"; periodLabel: string }> = {
+    "1h": { label: "Last hour", groupBy: "hour", periodLabel: "Last hour" },
+    "24h": { label: "Last 24h", groupBy: "hour", periodLabel: "Last 24 hours" },
+    "7d": { label: "Last 7d", groupBy: "day", periodLabel: "Last 7 days" },
+    "30d": { label: "Last 30d", groupBy: "day", periodLabel: "Last 30 days" },
+    "all": { label: "All time", groupBy: "day", periodLabel: "All time" },
+  };
+
+  function getWindowDates(w: TimeWindow): { from?: string; to?: string } {
+    const now = new Date();
+    const toISO = (d: Date) => d.toISOString().slice(0, 16);
+    switch (w) {
+      case "1h": {
+        const from = new Date(now.getTime() - 60 * 60 * 1000);
+        return { from: toISO(from), to: toISO(now) };
+      }
+      case "24h": {
+        const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        return { from: toISO(from), to: toISO(now) };
+      }
+      case "7d": {
+        const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return { from: toISO(from), to: toISO(now) };
+      }
+      case "30d": {
+        const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        return { from: toISO(from), to: toISO(now) };
+      }
+      case "all":
+        return {};
+      case "custom":
+        return { from: customFrom || undefined, to: customTo || undefined };
+    }
+  }
+
+  const analyticsGroupBy: "hour" | "day" = timeWindow === "custom"
+    ? "day"
+    : (timeWindowConfig[timeWindow]?.groupBy ?? "day");
+
+  const periodLabel = timeWindow === "custom"
+    ? (customFrom && customTo ? `${customFrom} – ${customTo}` : "Custom range")
+    : (timeWindowConfig[timeWindow]?.periodLabel ?? "Last 7 days");
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
   const sessionPage = Math.max(1, parseInt(searchParams.get("sessionPage") || "1", 10));
@@ -527,13 +573,27 @@ function DashboardContent() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
-  function setAnalyticsGroupByParam(g: "hour" | "day" | "week") {
+  function setTimeWindowParam(w: TimeWindow) {
     const params = new URLSearchParams(searchParams.toString());
-    if (g === "day") {
-      params.delete("groupBy");
+    params.delete("groupBy");
+    if (w === "7d") {
+      params.delete("window");
     } else {
-      params.set("groupBy", g);
+      params.set("window", w);
     }
+    if (w !== "custom") {
+      params.delete("from");
+      params.delete("to");
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setCustomDates(from: string, to: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("window", "custom");
+    params.delete("groupBy");
+    if (from) params.set("from", from); else params.delete("from");
+    if (to) params.set("to", to); else params.delete("to");
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
@@ -542,13 +602,14 @@ function DashboardContent() {
     if (tab !== "analytics") return;
     let cancelled = false;
     setAnalyticsLoading(true);
+    const { from, to } = getWindowDates(timeWindow);
     const fetches: Promise<void>[] = [
-      getAnalytics({ profile: selectedProfile, groupBy: analyticsGroupBy }).then((data) => {
+      getAnalytics({ profile: selectedProfile, groupBy: analyticsGroupBy, from, to }).then((data) => {
         if (!cancelled) setAnalyticsData(data);
       }),
     ];
-    // When in hourly mode (3 days only), also fetch all-time stats for tokens/sessions
-    if (analyticsGroupBy === "hour") {
+    // When viewing a subset, also fetch all-time stats for tokens/sessions
+    if (timeWindow !== "all") {
       fetches.push(
         getAnalytics({ profile: selectedProfile, groupBy: "day" }).then((allTime) => {
           if (!cancelled) {
@@ -565,7 +626,8 @@ function DashboardContent() {
       if (!cancelled) setAnalyticsLoading(false);
     });
     return () => { cancelled = true; };
-  }, [tab, selectedProfile, analyticsGroupBy]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, selectedProfile, timeWindow, customFrom, customTo]);
 
   useEffect(() => {
     Promise.all([getProfiles(), getVersion()]).then(([p, v]) => {
@@ -1558,25 +1620,41 @@ function DashboardContent() {
               </div>
             ) : (
               <>
-                {/* Time controls */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground mr-1">Group by:</span>
+                {/* Time window controls */}
+                <div className="flex flex-wrap items-center gap-2">
                   {analyticsLoading && analyticsData && (
                     <span className="size-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                   )}
-                  {(["hour", "day", "week"] as const).map((g) => (
+                  {(["1h", "24h", "7d", "30d", "all", "custom"] as const).map((w) => (
                     <button
-                      key={g}
-                      onClick={() => setAnalyticsGroupByParam(g)}
+                      key={w}
+                      onClick={() => setTimeWindowParam(w)}
                       className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                        analyticsGroupBy === g
+                        timeWindow === w
                           ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                           : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
                       }`}
                     >
-                      {g === "hour" ? "Hours" : g === "day" ? "Days" : "Weeks"}
+                      {w === "custom" ? "Custom" : w === "all" ? "All time" : w === "1h" ? "Last hour" : w === "24h" ? "Last 24h" : w === "7d" ? "Last 7d" : "Last 30d"}
                     </button>
                   ))}
+                  {timeWindow === "custom" && (
+                    <div className="flex items-center gap-2 ml-2">
+                      <input
+                        type="date"
+                        value={customFrom}
+                        onChange={(e) => setCustomDates(e.target.value, customTo)}
+                        className="px-2 py-1 rounded-md text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 focus:border-emerald-500/50 focus:outline-none"
+                      />
+                      <span className="text-xs text-muted-foreground">to</span>
+                      <input
+                        type="date"
+                        value={customTo}
+                        onChange={(e) => setCustomDates(customFrom, e.target.value)}
+                        className="px-2 py-1 rounded-md text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 focus:border-emerald-500/50 focus:outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Summary stats */}
@@ -1594,7 +1672,7 @@ function DashboardContent() {
                         <CardContent>
                           <div className="text-3xl font-bold">${totalCostPeriod.toFixed(2)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">
-                            {analyticsGroupBy === "hour" ? "Last 3 days" : "All time"}
+                            {periodLabel}
                           </div>
                         </CardContent>
                       </Card>
@@ -1603,7 +1681,7 @@ function DashboardContent() {
                           <CardTitle className="text-sm font-medium text-muted-foreground">Total Tokens</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-3xl font-bold">{formatTokens(analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalTokens : totalTokens)}</div>
+                          <div className="text-3xl font-bold">{formatTokens(timeWindow !== "all" && analyticsAllTime ? analyticsAllTime.totalTokens : totalTokens)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
                         </CardContent>
                       </Card>
@@ -1612,20 +1690,20 @@ function DashboardContent() {
                           <CardTitle className="text-sm font-medium text-muted-foreground">Total Sessions</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-3xl font-bold">{analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalSessions : totalSessions}</div>
+                          <div className="text-3xl font-bold">{timeWindow !== "all" && analyticsAllTime ? analyticsAllTime.totalSessions : totalSessions}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
                           <CardTitle className="text-sm font-medium text-muted-foreground">
-                            {analyticsGroupBy === "hour" ? "Avg Hourly Cost" : analyticsGroupBy === "week" ? "Avg Weekly Cost" : "Avg Daily Cost"}
+                            {analyticsGroupBy === "hour" ? "Avg Hourly Cost" : "Avg Daily Cost"}
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">${avgDailyCost.toFixed(2)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">
-                            {analyticsGroupBy === "hour" ? "Last 3 days" : "All time"}
+                            {periodLabel}
                           </div>
                         </CardContent>
                       </Card>

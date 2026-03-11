@@ -1,107 +1,336 @@
-<p align="center">
-  <img src="frontend/public/clawatch-owl.svg" alt="ClaWatch Logo" width="130" height="130" />
-</p>
-
-<h1 align="center">ClaWatch</h1>
-
-<p align="center"><strong>Never let your agents run wild.</strong></p>
-
-Open-source observability & monitoring for AI agents. Think Datadog, but for agent pipelines.
-
-Real-time visibility, alerting, cost tracking, and the ability to pause or approve agent actions before they cause damage.
-
-## Quick Start
-
-```bash
-# Install
-npm install -g clawatch
-
-# Start everything (auto-configures on first run)
-clawatch start
-```
-
-## What You Get
-
-- **📊 Real-time Monitoring** — Track every heartbeat, token, and API call from your agents
-- **🔔 Smart Alerts** — Telegram notifications when agents get stuck, loop, or spike in cost
-- **💰 Cost Tracking** — Per-agent, per-model cost breakdown with budget thresholds
-- **⏸️ Pause/Resume** — One-click control to stop runaway agents
-- **🌐 Web Dashboard** — Beautiful dark-themed dashboard to monitor your fleet
-- **🔓 Open Source** — MIT licensed, self-host or use our managed service
-
-## Architecture
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  clawatch    │────▶│  Backend    │────▶│  Telegram   │
-│  CLI agent   │     │  (Express)  │     │  Alerts     │
-│  (daemon)    │     │  + SQLite   │     │             │
-└─────────────┘     └──────┬──────┘     └─────────────┘
-       │                   │
-       │              ┌────┴────┐
-  Watches:            │Dashboard│
-  ~/.openclaw/        │(Next.js)│
-  agents/sessions/    └─────────┘
-  logs/
-```
-
-## Project Structure
-
-```
-clawatch/
-├── cli/        # Collection agent CLI (npm package)
-├── backend/    # Express + SQLite API server
-├── frontend/   # Next.js dashboard + landing page
-└── API_CONTRACT.md
-```
-
-## CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `clawatch start` | Start everything (auto-init on first run) |
-| `clawatch start` | Start monitoring daemon |
-| `clawatch stop` | Stop the daemon |
-| `clawatch status` | Show agent count, session stats |
-| `clawatch logs` | Tail daemon logs |
-
-## Backend API
-
-See [API_CONTRACT.md](./API_CONTRACT.md) for the full API specification.
-
-## Development
-
-```bash
-# Backend
-cd backend && npm install && npm run dev
-
-# Frontend
-cd frontend && npm install && npm run dev
-
-# CLI
-cd cli && npm install && npm run build
-```
-
-## Supported Platforms
-
-- macOS (Apple Silicon & Intel)
-- Linux (x64, ARM)
-- Windows (WSL)
-- Raspberry Pi
-- Any cloud VM (AWS, GCP, Hetzner, etc.)
-
-## Alert Channels
-
-- ✅ Telegram (live)
-- 🔜 Slack
-- 🔜 Discord
-- 🔜 Email
-- 🔜 PagerDuty
-
-## License
-
-MIT © [GENWAY AI](https://github.com/GENWAY-AI)
+<div align="center">
+  <img src="frontend/public/clawatch-owl.svg" alt="ClaWatch" width="160" height="160" />
+  
+  # ClaWatch
+  
+  ### **Know what your agents are doing. Right now.**
+  
+  *Open source observability for OpenClaw agents — real-time monitoring, cost tracking, and smart alerts*
+  
+  [![npm version](https://img.shields.io/npm/v/clawatch.svg?style=flat&color=00C853)](https://www.npmjs.com/package/clawatch)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](https://opensource.org/licenses/MIT)
+  
+  [**🚀 Live Demo**](https://clawatch.dev/dashboard) · [**📦 npm**](https://www.npmjs.com/package/clawatch) · [**⭐ Star on GitHub**](https://github.com/GENWAY-AI/clawatch)
+</div>
 
 ---
 
-**Website:** [clawatch.dev](https://clawatch.dev)
+## Why ClaWatch?
+
+Your OpenClaw agents spawn sub-agents, burn tokens, call tools, and sometimes get stuck in loops or blow through API credits. **ClaWatch gives you visibility** — track every heartbeat, session, and dollar spent in real-time.
+
+Built for teams shipping AI products. Open source. Free forever.
+
+---
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%">
+
+### 💸 **Cost Monitoring & Thresholds**
+Track spend per agent in real-time. Set daily or monthly limits with automatic alerts when thresholds are approached or exceeded.
+
+</td>
+<td width="50%">
+
+### 🚨 **Smart Alerts to Your Phone**
+Get instant notifications for stuck agents, errors, cost spikes, and anomalies. Telegram, Slack, or webhook — your choice.
+
+</td>
+</tr>
+<tr>
+<td>
+
+### ⏯️ **Control Agents from Anywhere**
+Pause, resume, or stop agents directly from the dashboard or your phone. One click, instant effect.
+
+</td>
+<td>
+
+### 📊 **Unified Session View**
+Group sessions into projects for a bird's-eye view. See cost, timeline, and agent breakdown across related work.
+
+</td>
+</tr>
+<tr>
+<td>
+
+### 🔍 **Smart Error Insights**
+No more digging through scattered logs. ClaWatch surfaces errors in plain language with context and suggested fixes.
+
+</td>
+<td>
+
+### 🌐 **Multi-Profile Support**
+Monitor multiple OpenClaw installations from one dashboard. Switch profiles instantly — dev, staging, production.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🚀 Quick Start
+
+### Install
+
+```bash
+npm install -g clawatch
+```
+
+### Start Monitoring
+
+```bash
+clawatch start
+```
+
+That's it! ClaWatch auto-detects your OpenClaw agents and opens the dashboard at `http://localhost:3001`.
+
+### Add Alerts (Optional)
+
+```bash
+# Get Telegram notifications when agents misbehave
+export TELEGRAM_BOT_TOKEN="your_bot_token"
+export TELEGRAM_CHAT_ID="your_chat_id"
+
+clawatch start
+```
+
+---
+
+## 🛠️ CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `clawatch start` | Auto-detect agents, start monitoring, and open the dashboard |
+| `clawatch stop` | Stop the monitoring daemon gracefully |
+| `clawatch status` | Show active agents, sessions, and daemon health |
+| `clawatch logs` | Stream real-time logs from the monitoring daemon |
+
+---
+
+## 🏗️ How It Works
+
+```
+┌──────────────────┐
+│  OpenClaw Agents │  (~/.openclaw/*)
+│  Sessions, Logs  │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+│  ClaWatch CLI    │─────▶│  Backend API     │─────▶│  Alert Channels  │
+│  (Daemon)        │      │  Express+SQLite  │      │  Telegram/Slack  │
+└──────────────────┘      └────────┬─────────┘      └──────────────────┘
+                                   │
+                          ┌────────▼─────────┐
+                          │   Web Dashboard  │
+                          │   (Next.js)      │
+                          └──────────────────┘
+                         http://localhost:3001
+```
+
+1. **CLI daemon** watches `~/.openclaw/` for agent activity
+2. **Backend API** aggregates data into SQLite
+3. **Dashboard** visualizes everything in real-time
+4. **Alert system** watches for anomalies and notifies you
+
+---
+
+## 🦞 Works with Your Stack
+
+ClaWatch auto-detects your agent framework. Full support today, more coming soon.
+
+| Framework | Status |
+|-----------|--------|
+| [🦞 OpenClaw](https://openclaw.ai) | ✅ Fully supported |
+| [NanoClaw](https://nanoclaw.net) | ✅ Fully supported |
+| [ZeroClaw](https://zeroclaw.dev) | 🔜 Coming soon |
+| [TrustClaw](https://www.trustclaw.app) | 🔜 Coming soon |
+| [Nanobot](https://nanobot.ai) | 🔜 Coming soon |
+| [PicoClaw](https://picoclaw.dev) | 🔜 Coming soon |
+
+Want support for your framework? [Request it →](https://github.com/GENWAY-AI/clawatch/issues)
+
+---
+
+## 🔔 Alert Channels
+
+Get notified where your team already works.
+
+| Channel | Status | Setup Guide |
+|---------|--------|-------------|
+| 📱 **Telegram** | ✅ Live | [Setup docs](https://github.com/GENWAY-AI/clawatch#add-alerts-optional) |
+| 💬 **Slack** | 🔜 Soon | Coming soon |
+| 🎮 **Discord** | 🔜 Soon | Coming soon |
+| 📧 **Email** | 🔜 Soon | Coming soon |
+| 📟 **PagerDuty** | 🔜 Soon | Coming soon |
+
+### Alert Types
+
+- 🔴 **Agent Crash** — Agent stopped unexpectedly
+- 🔁 **Infinite Loop** — Agent stuck repeating the same action
+- 💸 **Cost Spike** — Agent exceeded hourly/daily budget
+- 🕐 **Agent Stalled** — No activity for >10 minutes
+- ⚠️ **High Error Rate** — Multiple tool call failures
+
+---
+
+## 🐳 Self-Host with Docker
+
+Want to run ClaWatch on a remote server? Use Docker:
+
+```bash
+git clone https://github.com/GENWAY-AI/clawatch.git
+cd clawatch
+docker build -t clawatch .
+docker run -p 3001:3001 -e TELEGRAM_BOT_TOKEN=xxx clawatch
+```
+
+Supports any platform with Docker: **AWS, GCP, Azure, Hetzner, Digital Ocean, Render, Fly.io**.
+
+---
+
+## 💻 Runs Where You Run
+
+If OpenClaw runs there, ClaWatch runs there.
+
+- ✅ macOS (Apple Silicon & Intel)
+- ✅ Linux (Ubuntu/Debian)
+- ✅ Windows WSL
+- ✅ Raspberry Pi
+- ✅ AWS / GCP / Digital Ocean / Hetzner
+
+---
+
+## 🧑‍💻 Development
+
+### Prerequisites
+
+- Node.js 18+
+- npm or pnpm
+
+### Local Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/GENWAY-AI/clawatch.git
+cd clawatch
+
+# Backend
+cd backend
+npm install
+npm run dev        # http://localhost:3001/api
+
+# Frontend (new terminal)
+cd frontend
+npm install
+npm run dev        # http://localhost:3000
+
+# CLI (new terminal)
+cd cli
+npm install
+npm run build
+npm link           # Makes `clawatch` command available
+```
+
+### Project Structure
+
+```
+clawatch/
+├── cli/              # Monitoring daemon + CLI
+│   ├── src/
+│   │   ├── cli.ts    # Main entry point
+│   │   └── daemon.ts # Background monitoring
+│   └── package.json
+├── backend/          # Express API
+│   ├── src/
+│   │   ├── index.ts  # Server
+│   │   ├── routes/   # REST endpoints
+│   │   └── db.ts     # SQLite schema
+│   └── package.json
+├── frontend/         # Next.js dashboard
+│   ├── app/          # Pages
+│   ├── components/   # React components
+│   └── package.json
+├── Dockerfile        # Production container
+└── API_CONTRACT.md   # Backend API docs
+```
+
+---
+
+## 📈 Roadmap
+
+### ✅ Shipped
+
+- [x] Real-time agent monitoring
+- [x] Cost tracking (per agent, per model)
+- [x] Telegram alerts
+- [x] Multi-profile support
+- [x] Session logs & project grouping
+- [x] Agent control (pause/resume)
+- [x] Docker support for self-hosting
+- [x] Pure WASM SQLite (no native deps)
+
+### 🚧 In Progress
+
+- [ ] Slack integration
+- [ ] Discord bot
+- [ ] Custom alert rules builder
+- [ ] Historical trend charts (7d/30d)
+
+### 🔮 Coming Soon
+
+- [ ] NanoClaw/ZeroClaw/TrustClaw support
+- [ ] Multi-user auth & teams
+- [ ] Agent performance scoring
+- [ ] Cost prediction
+- [ ] Webhook alerts
+- [ ] Email alerts
+
+[**Vote on features →**](https://github.com/GENWAY-AI/clawatch/discussions)
+
+---
+
+## 🤝 Contributing
+
+We love contributions! Bug reports, feature requests, and PRs are all welcome.
+
+### How to Contribute
+
+1. **Fork the repo** and create a feature branch
+2. **Make your changes** (add tests if applicable)
+3. **Open a PR** with a clear description
+4. **We'll review** and merge within 48 hours
+
+### Good First Issues
+
+Check out issues labeled [`good first issue`](https://github.com/GENWAY-AI/clawatch/labels/good%20first%20issue).
+
+---
+
+## 💬 Community & Support
+
+- **GitHub Discussions**: [Ask questions, share tips](https://github.com/GENWAY-AI/clawatch/discussions)
+- **GitHub Issues**: [Report bugs, request features](https://github.com/GENWAY-AI/clawatch/issues)
+- **Email**: hello@genway.ai
+
+---
+
+## 📜 License
+
+MIT © [GENWAY AI](https://github.com/GENWAY-AI)
+
+Free to use in commercial products. See [LICENSE](./LICENSE) for details.
+
+---
+
+<div align="center">
+  
+  ### **Built with ❤️ by [GENWAY AI](https://genway.ai)**
+  
+  [Website](https://clawatch.dev) · [GitHub](https://github.com/GENWAY-AI/clawatch) · [npm](https://www.npmjs.com/package/clawatch)
+  
+</div>

@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+*.md
+video/
+cli/
+.env*
+*.log
+.DS_Store

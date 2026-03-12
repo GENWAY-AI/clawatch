@@ -456,14 +456,12 @@ function DashboardContent() {
   const [showingDemoData, setShowingDemoData] = useState(false);
   const [showCostSettings, setShowCostSettings] = useState(false);
 
-  // Chart zoom state — restore from URL params if present
+  // Chart zoom state — zoom range derived from URL params (single source of truth)
   const [zoomLeft, setZoomLeft] = useState<string | null>(null);
   const [zoomRight, setZoomRight] = useState<string | null>(null);
-  const initZoomFrom = searchParams.get("zoomFrom");
-  const initZoomTo = searchParams.get("zoomTo");
-  const [zoomRange, setZoomRange] = useState<{ left: string; right: string } | null>(
-    initZoomFrom && initZoomTo ? { left: initZoomFrom, right: initZoomTo } : null
-  );
+  const zoomFromParam = searchParams.get("zoomFrom");
+  const zoomToParam = searchParams.get("zoomTo");
+  const zoomRange = zoomFromParam && zoomToParam ? { left: zoomFromParam, right: zoomToParam } : null;
 
   const selectedProfile = searchParams.get("profile") || "default";
   type TimeWindow = "1h" | "24h" | "7d" | "30d" | "all" | "custom";
@@ -576,6 +574,20 @@ function DashboardContent() {
     return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   };
 
+  // Chart zoom helpers — update URL params (source of truth)
+  const setZoomParams = (left: string, right: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("zoomFrom", left);
+    params.set("zoomTo", right);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+  const clearZoomParams = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("zoomFrom");
+    params.delete("zoomTo");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
   // Chart zoom handlers
   const [isDragging, setIsDragging] = useState(false);
   const handleZoomMouseDown = (e: Record<string, unknown>) => {
@@ -592,34 +604,20 @@ function DashboardContent() {
     if (zoomLeft && zoomRight && zoomLeft !== zoomRight) {
       const [left, right] = [zoomLeft, zoomRight].sort();
       // Enforce minimum zoom: at least 2 different data points selected
-      // For daily data, adjacent days have 24h diff; for hourly, 1h diff
-      // Allow any selection where left !== right (already checked above)
-      setZoomRange({ left, right });
+      setZoomParams(left, right);
     }
     setZoomLeft(null);
     setZoomRight(null);
   };
   const resetZoom = () => {
-    setZoomRange(null);
+    clearZoomParams();
     setZoomLeft(null);
     setZoomRight(null);
     setZoomedAnalytics(null);
     prevZoomRange.current = null;
   };
 
-  // Persist zoom range to URL params
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (zoomRange) {
-      params.set("zoomFrom", zoomRange.left);
-      params.set("zoomTo", zoomRange.right);
-    } else {
-      params.delete("zoomFrom");
-      params.delete("zoomTo");
-    }
-    router.replace(`?${params.toString()}`, { scroll: false });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoomRange]);
+
 
   // Dynamic date formatting based on zoom level
   const zoomChartDateFormatter = (d: string) => {
@@ -640,12 +638,6 @@ function DashboardContent() {
     }
     return formatChartDate(d, effectiveGroupBy);
   };
-
-  // Reset zoom when time window changes
-  useEffect(() => {
-    resetZoom();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeWindow, customFrom, customTo]);
 
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
@@ -813,7 +805,7 @@ function DashboardContent() {
       setZoomedAnalytics(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoomRange, selectedProfile, analyticsData]);
+  }, [zoomFromParam, zoomToParam, selectedProfile, analyticsData]);
 
   useEffect(() => {
     Promise.all([getProfiles(), getVersion()]).then(([p, v]) => {

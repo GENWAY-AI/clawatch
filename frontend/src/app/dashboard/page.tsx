@@ -1015,9 +1015,17 @@ function DashboardContent() {
 
                       {/* Status badge */}
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className={`${sc.color} border text-xs`}>
-                          {sc.label}
-                        </Badge>
+                        <div className="relative group/tip flex items-center gap-1.5">
+                          <Badge variant="outline" className={`${sc.color} border text-xs`}>
+                            {sc.label}
+                          </Badge>
+                          <span className="text-muted-foreground/60 hover:text-muted-foreground cursor-help transition-colors">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                          </span>
+                          <div className="absolute left-0 top-full mt-2 z-50 hidden group-hover/tip:block w-64 px-3 py-2 text-xs text-popover-foreground bg-popover border border-border rounded-lg shadow-lg">
+                            {sc.tooltip}
+                          </div>
+                        </div>
                         {agent.overLimit && agent.limit != null && (() => {
                           const spend = agent.limitType === "daily" ? (agent.todaySpend ?? 0) : (agent.mtdSpend ?? 0);
                           const over = spend - agent.limit;

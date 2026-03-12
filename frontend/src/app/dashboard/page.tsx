@@ -479,7 +479,15 @@ function DashboardContent() {
 
   function getWindowDates(w: TimeWindow): { from?: string; to?: string } {
     const now = new Date();
-    const toISO = (d: Date) => d.toISOString().slice(0, 16);
+    // Use local time (not UTC) — backend stores/compares dates in local timezone
+    const toISO = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const h = String(d.getHours()).padStart(2, "0");
+      const min = String(d.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${day}T${h}:${min}`;
+    };
     switch (w) {
       case "1h": {
         const from = new Date(now.getTime() - 60 * 60 * 1000);

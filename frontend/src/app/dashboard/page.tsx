@@ -599,6 +599,8 @@ function DashboardContent() {
     setZoomRange(null);
     setZoomLeft(null);
     setZoomRight(null);
+    setZoomedAnalytics(null);
+    prevZoomRange.current = null;
   };
 
   // Dynamic date formatting based on zoom level
@@ -752,21 +754,37 @@ function DashboardContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, selectedProfile, timeWindow, customFrom, customTo]);
 
-  // Re-fetch with hourly granularity when zoomed into a small range
+  // Re-fetch with hourly granularity on first zoom into daily data
+  // For nested zooms (already have hourly data), just filter — don't re-fetch
+  const prevZoomRange = useRef<{ left: string; right: string } | null>(null);
   useEffect(() => {
     if (!zoomRange || !analyticsData) {
       setZoomedAnalytics(null);
+      prevZoomRange.current = null;
+      return;
+    }
+    // If we already have hourly data from a previous zoom, don't re-fetch —
+    // the computed zoomedBuckets will filter it to the new range
+    if (zoomedAnalytics && prevZoomRange.current) {
+      prevZoomRange.current = zoomRange;
       return;
     }
     const leftDate = parseChartDate(zoomRange.left);
     const rightDate = parseChartDate(zoomRange.right);
     const rangeDays = (rightDate.getTime() - leftDate.getTime()) / (24 * 60 * 60 * 1000);
-    // Only re-fetch hourly if range <= 7 days and we're currently on daily grouping
-    if (rangeDays <= 7 && analyticsGroupBy === "day") {
+    // Only re-fetch hourly if we're on daily grouping
+    if (analyticsGroupBy === "day") {
       let cancelled = false;
       setZoomFetching(true);
-      getAnalytics({ profile: selectedProfile, groupBy: "hour", from: zoomRange.left, to: zoomRange.right }).then((data) => {
-        if (!cancelled) setZoomedAnalytics(data);
+      // Fetch the full day range (not the narrow zoom) to support nested zooms
+      const fetchLeft = zoomRange.left.includes("T") ? zoomRange.left.split("T")[0] : zoomRange.left;
+      const fetchRightDate = new Date(parseChartDate(zoomRange.right).getTime() + 24 * 60 * 60 * 1000);
+      const fetchRight = fetchRightDate.toISOString().slice(0, 10);
+      getAnalytics({ profile: selectedProfile, groupBy: "hour", from: fetchLeft, to: fetchRight }).then((data) => {
+        if (!cancelled) {
+          setZoomedAnalytics(data);
+          prevZoomRange.current = zoomRange;
+        }
       }).catch(() => {}).finally(() => {
         if (!cancelled) setZoomFetching(false);
       });

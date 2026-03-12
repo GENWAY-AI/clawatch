@@ -1808,7 +1808,7 @@ function DashboardContent() {
                     return (
                       <button
                         key={w}
-                        onClick={() => { setTimeWindowParam(w); resetZoom(); }}
+                        onClick={() => { setTimeWindowParam(w); setZoomLeft(null); setZoomRight(null); setZoomedAnalytics(null); prevZoomRange.current = null; }}
                         className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                           isActive
                             ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"

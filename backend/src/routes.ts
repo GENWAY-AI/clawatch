@@ -805,9 +805,10 @@ router.get("/analytics", async (req: Request, res: Response) => {
       effectiveFrom = threeDaysAgo.toISOString();
     }
 
-    // Filter by date range using startedAt
-    if (effectiveFrom) sessions = sessions.filter((s) => s.startedAt >= effectiveFrom!);
-    if (to) sessions = sessions.filter((s) => s.startedAt <= to);
+    // Filter by date range using lastActivityAt so sessions active in the
+    // window are included even if they started before it (#58)
+    if (effectiveFrom) sessions = sessions.filter((s) => (s.lastActivityAt || s.startedAt) >= effectiveFrom!);
+    if (to) sessions = sessions.filter((s) => (s.lastActivityAt || s.startedAt) <= to);
 
     // Get project tags for all sessions
     const sessionIds = sessions.map((s) => s.id);

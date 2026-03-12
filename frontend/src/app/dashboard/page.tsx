@@ -550,6 +550,15 @@ function DashboardContent() {
   // Effective groupBy for chart formatting: hourly when zoomed with hourly data
   const effectiveGroupBy = zoomedAnalytics ? "hour" : analyticsGroupBy;
 
+  // Tooltip date formatter — includes time when showing hourly data
+  const formatTooltipDate = (label: string) => {
+    const date = parseChartDate(label);
+    if (effectiveGroupBy === "hour") {
+      return date.toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+    }
+    return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  };
+
   // Chart zoom handlers
   const [isDragging, setIsDragging] = useState(false);
   const handleZoomMouseDown = (e: Record<string, unknown>) => {
@@ -1898,7 +1907,7 @@ function DashboardContent() {
                             content={({ active, payload, label }) => {
                               if (!active || !payload?.length) return null;
                               const bucket = zoomedBuckets.find((b) => b.date === label);
-                              const dateStr = parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                              const dateStr = formatTooltipDate(String(label));
                               const cost = bucket?.costUsd?.toFixed(2) ?? "0";
                               const tokens = formatTokens(bucket?.tokenCount ?? 0);
                               const sess = bucket?.sessionCount ?? 0;
@@ -1966,7 +1975,7 @@ function DashboardContent() {
                                   if (!visible.length) return null;
                                   return (
                                     <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
-                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{formatTooltipDate(String(label))}</div>
                                       {visible.map((entry) => (
                                         <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
                                           {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}
@@ -2058,7 +2067,7 @@ function DashboardContent() {
                                   if (!visible.length) return null;
                                   return (
                                     <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
-                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{formatTooltipDate(String(label))}</div>
                                       {visible.map((entry) => (
                                         <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
                                           {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}

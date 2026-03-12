@@ -509,6 +509,20 @@ function DashboardContent() {
   const periodLabel = timeWindow === "custom"
     ? (customFrom && customTo ? `${customFrom} – ${customTo}` : "Custom range")
     : (timeWindowConfig[timeWindow]?.periodLabel ?? "Last 7 days");
+
+  // Zoom-aware label for stat cards
+  const activeLabel = (() => {
+    if (zoomRange) {
+      const leftDate = parseChartDate(zoomRange.left);
+      const rightDate = parseChartDate(zoomRange.right);
+      const rangeDays = (rightDate.getTime() - leftDate.getTime()) / (24 * 60 * 60 * 1000);
+      const fmt = (d: Date) => rangeDays <= 3
+        ? d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
+        : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      return `${fmt(leftDate)} — ${fmt(rightDate)}`;
+    }
+    return periodLabel;
+  })();
   // Zoomed buckets: filter data to zoom range if set
   const zoomedBuckets = zoomRange && analyticsData
     ? analyticsData.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right)
@@ -1707,19 +1721,22 @@ function DashboardContent() {
                   {analyticsLoading && analyticsData && (
                     <span className="size-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                   )}
-                  {(["1h", "24h", "7d", "30d", "all", "custom"] as const).map((w) => (
-                    <button
-                      key={w}
-                      onClick={() => setTimeWindowParam(w)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                        timeWindow === w
-                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                          : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
-                      }`}
-                    >
-                      {w === "custom" ? "Custom" : w === "all" ? "All time" : w === "1h" ? "Last hour" : w === "24h" ? "Last 24h" : w === "7d" ? "Last 7d" : "Last 30d"}
-                    </button>
-                  ))}
+                  {(["1h", "24h", "7d", "30d", "all", "custom"] as const).map((w) => {
+                    const isActive = timeWindow === w && !zoomRange;
+                    return (
+                      <button
+                        key={w}
+                        onClick={() => { setTimeWindowParam(w); resetZoom(); }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                          isActive
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                            : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
+                        }`}
+                      >
+                        {w === "custom" ? "Custom" : w === "all" ? "All time" : w === "1h" ? "Last hour" : w === "24h" ? "Last 24h" : w === "7d" ? "Last 7d" : "Last 30d"}
+                      </button>
+                    );
+                  })}
                   {timeWindow === "custom" && (
                     <div className="flex items-center gap-2 ml-2">
                       <input
@@ -1755,7 +1772,7 @@ function DashboardContent() {
                         <CardContent>
                           <div className="text-3xl font-bold">${totalCostPeriod.toFixed(2)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">
-                            {periodLabel}
+                            {activeLabel}
                           </div>
                         </CardContent>
                       </Card>
@@ -1765,7 +1782,7 @@ function DashboardContent() {
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">{formatTokens(zoomRange ? totalTokens : (timeWindow !== "all" && analyticsAllTime ? analyticsAllTime.totalTokens : totalTokens))}</div>
-                          <div className="text-[11px] text-muted-foreground/60 mt-1">{zoomRange ? "Zoomed range" : (timeWindow === "custom" ? periodLabel : "All time")}</div>
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">{activeLabel}</div>
                         </CardContent>
                       </Card>
                       <Card>
@@ -1774,7 +1791,7 @@ function DashboardContent() {
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">{zoomRange ? totalSessions : (timeWindow !== "all" && analyticsAllTime ? analyticsAllTime.totalSessions : totalSessions)}</div>
-                          <div className="text-[11px] text-muted-foreground/60 mt-1">{zoomRange ? "Zoomed range" : (timeWindow === "custom" ? periodLabel : "All time")}</div>
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">{activeLabel}</div>
                         </CardContent>
                       </Card>
                       <Card>
@@ -1786,7 +1803,7 @@ function DashboardContent() {
                         <CardContent>
                           <div className="text-3xl font-bold">${avgDailyCost.toFixed(2)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">
-                            {periodLabel}
+                            {activeLabel}
                           </div>
                         </CardContent>
                       </Card>

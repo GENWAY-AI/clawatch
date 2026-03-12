@@ -1803,12 +1803,29 @@ function DashboardContent() {
                         <span className="text-[11px] text-muted-foreground/50">Click &amp; drag to zoom</span>
                       )}
                       {zoomRange && (
-                        <button
-                          onClick={resetZoom}
-                          className="px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-300 border border-zinc-700 hover:border-emerald-500/50 hover:text-emerald-400 transition-colors"
-                        >
-                          ↩ Reset zoom
-                        </button>
+                        <>
+                          <span className="text-xs text-emerald-400/80 font-medium">
+                            {(() => {
+                              const fmt = (d: string) => {
+                                const date = parseChartDate(d);
+                                const leftDate = parseChartDate(zoomRange.left);
+                                const rightDate = parseChartDate(zoomRange.right);
+                                const rangeDays = (rightDate.getTime() - leftDate.getTime()) / (24 * 60 * 60 * 1000);
+                                if (rangeDays <= 3) {
+                                  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+                                }
+                                return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                              };
+                              return `${fmt(zoomRange.left)} — ${fmt(zoomRange.right)}`;
+                            })()}
+                          </span>
+                          <button
+                            onClick={resetZoom}
+                            className="px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-300 border border-zinc-700 hover:border-emerald-500/50 hover:text-emerald-400 transition-colors"
+                          >
+                            ↩ Reset zoom
+                          </button>
+                        </>
                       )}
                     </div>
                   </CardHeader>

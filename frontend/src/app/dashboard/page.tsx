@@ -529,13 +529,18 @@ function DashboardContent() {
     : analyticsData?.byAgent ?? [];
 
   // Chart zoom handlers
+  const [isDragging, setIsDragging] = useState(false);
   const handleZoomMouseDown = (e: Record<string, unknown>) => {
-    if (e?.activeLabel) setZoomLeft(String(e.activeLabel));
+    if (e?.activeLabel) {
+      setZoomLeft(String(e.activeLabel));
+      setIsDragging(true);
+    }
   };
   const handleZoomMouseMove = (e: Record<string, unknown>) => {
     if (zoomLeft && e?.activeLabel) setZoomRight(String(e.activeLabel));
   };
   const handleZoomMouseUp = () => {
+    setIsDragging(false);
     if (zoomLeft && zoomRight && zoomLeft !== zoomRight) {
       const [left, right] = [zoomLeft, zoomRight].sort();
       // Enforce minimum 1-hour zoom range
@@ -553,6 +558,26 @@ function DashboardContent() {
     setZoomRange(null);
     setZoomLeft(null);
     setZoomRight(null);
+  };
+
+  // Dynamic date formatting based on zoom level
+  const zoomChartDateFormatter = (d: string) => {
+    if (zoomRange) {
+      const leftDate = parseChartDate(zoomRange.left);
+      const rightDate = parseChartDate(zoomRange.right);
+      const rangeDays = (rightDate.getTime() - leftDate.getTime()) / (24 * 60 * 60 * 1000);
+      const date = parseChartDate(d);
+      if (rangeDays <= 1) {
+        // Under 1 day: show time only (HH:MM)
+        return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      }
+      if (rangeDays <= 7) {
+        // Under 7 days: show date + time
+        const month = date.toLocaleDateString("en-US", { month: "short" });
+        return `${month} ${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      }
+    }
+    return formatChartDate(d, analyticsGroupBy);
   };
 
   // Reset zoom when time window changes
@@ -1788,7 +1813,7 @@ function DashboardContent() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]" style={{ cursor: zoomLeft ? "col-resize" : "crosshair" }}>
+                    <div className="h-[300px]" style={{ cursor: isDragging ? "col-resize" : "crosshair", userSelect: isDragging ? "none" : "auto" }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                           data={zoomedBuckets}
@@ -1797,7 +1822,7 @@ function DashboardContent() {
                           onMouseUp={handleZoomMouseUp}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                          <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
+                          <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => zoomChartDateFormatter(String(d))} />
                           <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                           <Tooltip
                             content={({ active, payload, label }) => {
@@ -1841,7 +1866,7 @@ function DashboardContent() {
                     <CardTitle className="text-base font-semibold">Usage by Project</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]" style={{ cursor: zoomLeft ? "col-resize" : "crosshair" }}>
+                    <div className="h-[300px]" style={{ cursor: isDragging ? "col-resize" : "crosshair", userSelect: isDragging ? "none" : "auto" }}>
                       <ResponsiveContainer width="100%" height="100%">
                         {(() => {
                           const projectColors = ["#f59e0b", "#ef4444", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1"];
@@ -1862,7 +1887,7 @@ function DashboardContent() {
                               onMouseUp={handleZoomMouseUp}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => zoomChartDateFormatter(String(d))} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                               <Tooltip
                                 content={({ active, payload, label }) => {
@@ -1928,7 +1953,7 @@ function DashboardContent() {
                     <CardTitle className="text-base font-semibold">Usage by Agent</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]" style={{ cursor: zoomLeft ? "col-resize" : "crosshair" }}>
+                    <div className="h-[300px]" style={{ cursor: isDragging ? "col-resize" : "crosshair", userSelect: isDragging ? "none" : "auto" }}>
                       <ResponsiveContainer width="100%" height="100%">
                         {(() => {
                           const agentChartColors: Record<string, string> = {
@@ -1954,7 +1979,7 @@ function DashboardContent() {
                               onMouseUp={handleZoomMouseUp}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => zoomChartDateFormatter(String(d))} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                               <Tooltip
                                 content={({ active, payload, label }) => {

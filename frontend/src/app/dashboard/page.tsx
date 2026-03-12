@@ -813,7 +813,7 @@ function DashboardContent() {
       setZoomedAnalytics(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoomRange, selectedProfile]);
+  }, [zoomRange, selectedProfile, analyticsData]);
 
   useEffect(() => {
     Promise.all([getProfiles(), getVersion()]).then(([p, v]) => {

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile, AnalyticsData, SpendData, CostLimits } from "@/lib/types";
 import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics, getSpend, setCostLimits, isUsingMockData } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, ReferenceArea } from "recharts";
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -456,8 +456,189 @@ function DashboardContent() {
   const [showingDemoData, setShowingDemoData] = useState(false);
   const [showCostSettings, setShowCostSettings] = useState(false);
 
+  // Chart zoom state — zoom range derived from URL params (single source of truth)
+  const [zoomLeft, setZoomLeft] = useState<string | null>(null);
+  const [zoomRight, setZoomRight] = useState<string | null>(null);
+  const zoomFromParam = searchParams.get("zoomFrom");
+  const zoomToParam = searchParams.get("zoomTo");
+  const zoomRange = zoomFromParam && zoomToParam ? { left: zoomFromParam, right: zoomToParam } : null;
+
   const selectedProfile = searchParams.get("profile") || "default";
-  const analyticsGroupBy = (searchParams.get("groupBy") as "hour" | "day" | "week") || "day";
+  type TimeWindow = "1h" | "24h" | "7d" | "30d" | "all" | "custom";
+  const timeWindow = (searchParams.get("window") as TimeWindow) || "7d";
+  const customFrom = searchParams.get("from") || "";
+  const customTo = searchParams.get("to") || "";
+
+  const timeWindowConfig: Record<Exclude<TimeWindow, "custom">, { label: string; groupBy: "hour" | "day"; periodLabel: string }> = {
+    "1h": { label: "Last hour", groupBy: "hour", periodLabel: "Last hour" },
+    "24h": { label: "Last 24h", groupBy: "hour", periodLabel: "Last 24 hours" },
+    "7d": { label: "Last 7d", groupBy: "day", periodLabel: "Last 7 days" },
+    "30d": { label: "Last 30d", groupBy: "day", periodLabel: "Last 30 days" },
+    "all": { label: "All time", groupBy: "day", periodLabel: "All time" },
+  };
+
+  function getWindowDates(w: TimeWindow): { from?: string; to?: string } {
+    const now = new Date();
+    const toISO = (d: Date) => d.toISOString().slice(0, 16);
+    switch (w) {
+      case "1h": {
+        const from = new Date(now.getTime() - 60 * 60 * 1000);
+        return { from: toISO(from), to: toISO(now) };
+      }
+      case "24h": {
+        const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        return { from: toISO(from), to: toISO(now) };
+      }
+      case "7d": {
+        const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return { from: toISO(from), to: toISO(now) };
+      }
+      case "30d": {
+        const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        return { from: toISO(from), to: toISO(now) };
+      }
+      case "all":
+        return {};
+      case "custom":
+        return { from: customFrom || undefined, to: customTo || undefined };
+    }
+  }
+
+  const analyticsGroupBy: "hour" | "day" = timeWindow === "custom"
+    ? "day"
+    : (timeWindowConfig[timeWindow]?.groupBy ?? "day");
+
+  const periodLabel = timeWindow === "custom"
+    ? (customFrom && customTo ? `${customFrom} – ${customTo}` : "Custom range")
+    : (timeWindowConfig[timeWindow]?.periodLabel ?? "Last 7 days");
+
+  // Zoom-aware label for stat cards
+  const activeLabel = (() => {
+    if (zoomRange) {
+      const leftDate = parseChartDate(zoomRange.left);
+      const rightDate = parseChartDate(zoomRange.right);
+      const rangeDays = (rightDate.getTime() - leftDate.getTime()) / (24 * 60 * 60 * 1000);
+      const fmt = (d: Date) => rangeDays <= 3
+        ? d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
+        : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      return `${fmt(leftDate)} — ${fmt(rightDate)}`;
+    }
+    return periodLabel;
+  })();
+  // Re-fetch with hourly granularity when zoomed into a small range
+  const [zoomedAnalytics, setZoomedAnalytics] = useState<AnalyticsData | null>(null);
+  const [zoomFetching, setZoomFetching] = useState(false);
+
+  // Zoomed buckets: always filter to exact zoom range (API may return wider range)
+  const zoomSource = zoomedAnalytics || analyticsData;
+  const inZoomRange = (date: string) => {
+    if (!zoomRange) return true;
+    // Compare using parsed timestamps for reliable comparison across date formats
+    const t = parseChartDate(date).getTime();
+    const left = parseChartDate(zoomRange.left).getTime();
+    let right = parseChartDate(zoomRange.right).getTime();
+    // If right is a date-only string (no time component), extend to end of that day
+    // so hourly data within the day isn't excluded
+    if (!zoomRange.right.includes("T")) {
+      right += 24 * 60 * 60 * 1000 - 1;
+    }
+    return t >= left && t <= right;
+  };
+  const zoomedBuckets = zoomRange && zoomSource
+    ? (zoomedAnalytics ? zoomedAnalytics.buckets.filter((b) => inZoomRange(b.date)) : zoomSource.buckets.filter((b) => inZoomRange(b.date)))
+    : analyticsData?.buckets ?? [];
+
+  const zoomedByProject = zoomRange && zoomSource
+    ? (zoomedAnalytics ? zoomedAnalytics.byProject : analyticsData!.byProject).map((proj) => ({
+        ...proj,
+        buckets: proj.buckets.filter((b) => inZoomRange(b.date)),
+      }))
+    : analyticsData?.byProject ?? [];
+
+  const zoomedByAgent = zoomRange && zoomSource
+    ? (zoomedAnalytics ? zoomedAnalytics.byAgent : analyticsData!.byAgent).map((agent) => ({
+        ...agent,
+        buckets: agent.buckets.filter((b) => inZoomRange(b.date)),
+      }))
+    : analyticsData?.byAgent ?? [];
+
+  // Effective groupBy for chart formatting: hourly when zoomed with hourly data
+  const effectiveGroupBy = zoomedAnalytics ? "hour" : analyticsGroupBy;
+
+  // Tooltip date formatter — includes time when showing hourly data
+  const formatTooltipDate = (label: string) => {
+    const date = parseChartDate(label);
+    if (effectiveGroupBy === "hour") {
+      return date.toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+    }
+    return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  };
+
+  // Chart zoom helpers — update URL params (source of truth)
+  const setZoomParams = (left: string, right: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("zoomFrom", left);
+    params.set("zoomTo", right);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+  const clearZoomParams = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("zoomFrom");
+    params.delete("zoomTo");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
+  // Chart zoom handlers
+  const [isDragging, setIsDragging] = useState(false);
+  const handleZoomMouseDown = (e: Record<string, unknown>) => {
+    if (e?.activeLabel) {
+      setZoomLeft(String(e.activeLabel));
+      setIsDragging(true);
+    }
+  };
+  const handleZoomMouseMove = (e: Record<string, unknown>) => {
+    if (zoomLeft && e?.activeLabel) setZoomRight(String(e.activeLabel));
+  };
+  const handleZoomMouseUp = () => {
+    setIsDragging(false);
+    if (zoomLeft && zoomRight && zoomLeft !== zoomRight) {
+      const [left, right] = [zoomLeft, zoomRight].sort();
+      // Enforce minimum zoom: at least 2 different data points selected
+      setZoomParams(left, right);
+    }
+    setZoomLeft(null);
+    setZoomRight(null);
+  };
+  const resetZoom = () => {
+    clearZoomParams();
+    setZoomLeft(null);
+    setZoomRight(null);
+    setZoomedAnalytics(null);
+    prevZoomRange.current = null;
+  };
+
+
+
+  // Dynamic date formatting based on zoom level
+  const zoomChartDateFormatter = (d: string) => {
+    if (zoomRange) {
+      const leftDate = parseChartDate(zoomRange.left);
+      const rightDate = parseChartDate(zoomRange.right);
+      const rangeDays = (rightDate.getTime() - leftDate.getTime()) / (24 * 60 * 60 * 1000);
+      const date = parseChartDate(d);
+      if (rangeDays <= 1) {
+        // Under 1 day: show time only (HH:MM)
+        return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      }
+      if (rangeDays <= 7) {
+        // Under 7 days: show date + time
+        const month = date.toLocaleDateString("en-US", { month: "short" });
+        return `${month} ${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      }
+    }
+    return formatChartDate(d, effectiveGroupBy);
+  };
+
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
   const sessionPage = Math.max(1, parseInt(searchParams.get("sessionPage") || "1", 10));
@@ -527,13 +708,29 @@ function DashboardContent() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
-  function setAnalyticsGroupByParam(g: "hour" | "day" | "week") {
+  function setTimeWindowParam(w: TimeWindow) {
     const params = new URLSearchParams(searchParams.toString());
-    if (g === "day") {
-      params.delete("groupBy");
+    params.delete("groupBy");
+    params.delete("zoomFrom");
+    params.delete("zoomTo");
+    if (w === "7d") {
+      params.delete("window");
     } else {
-      params.set("groupBy", g);
+      params.set("window", w);
     }
+    if (w !== "custom") {
+      params.delete("from");
+      params.delete("to");
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function setCustomDates(from: string, to: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("window", "custom");
+    params.delete("groupBy");
+    if (from) params.set("from", from); else params.delete("from");
+    if (to) params.set("to", to); else params.delete("to");
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
@@ -542,13 +739,14 @@ function DashboardContent() {
     if (tab !== "analytics") return;
     let cancelled = false;
     setAnalyticsLoading(true);
+    const { from, to } = getWindowDates(timeWindow);
     const fetches: Promise<void>[] = [
-      getAnalytics({ profile: selectedProfile, groupBy: analyticsGroupBy }).then((data) => {
+      getAnalytics({ profile: selectedProfile, groupBy: analyticsGroupBy, from, to }).then((data) => {
         if (!cancelled) setAnalyticsData(data);
       }),
     ];
-    // When in hourly mode (3 days only), also fetch all-time stats for tokens/sessions
-    if (analyticsGroupBy === "hour") {
+    // When viewing a subset, also fetch all-time stats for tokens/sessions
+    if (timeWindow !== "all") {
       fetches.push(
         getAnalytics({ profile: selectedProfile, groupBy: "day" }).then((allTime) => {
           if (!cancelled) {
@@ -565,7 +763,49 @@ function DashboardContent() {
       if (!cancelled) setAnalyticsLoading(false);
     });
     return () => { cancelled = true; };
-  }, [tab, selectedProfile, analyticsGroupBy]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, selectedProfile, timeWindow, customFrom, customTo]);
+
+  // Re-fetch with hourly granularity on first zoom into daily data
+  // For nested zooms (already have hourly data), just filter — don't re-fetch
+  const prevZoomRange = useRef<{ left: string; right: string } | null>(null);
+  useEffect(() => {
+    if (!zoomRange || !analyticsData) {
+      setZoomedAnalytics(null);
+      prevZoomRange.current = null;
+      return;
+    }
+    // If we already have hourly data from a previous zoom, don't re-fetch —
+    // the computed zoomedBuckets will filter it to the new range
+    if (zoomedAnalytics && prevZoomRange.current) {
+      prevZoomRange.current = zoomRange;
+      return;
+    }
+    const leftDate = parseChartDate(zoomRange.left);
+    const rightDate = parseChartDate(zoomRange.right);
+    const rangeDays = (rightDate.getTime() - leftDate.getTime()) / (24 * 60 * 60 * 1000);
+    // Only re-fetch hourly if we're on daily grouping
+    if (analyticsGroupBy === "day") {
+      let cancelled = false;
+      setZoomFetching(true);
+      // Fetch the full day range (not the narrow zoom) to support nested zooms
+      const fetchLeft = zoomRange.left.includes("T") ? zoomRange.left.split("T")[0] : zoomRange.left;
+      const fetchRightDate = new Date(parseChartDate(zoomRange.right).getTime() + 24 * 60 * 60 * 1000);
+      const fetchRight = fetchRightDate.toISOString().slice(0, 10);
+      getAnalytics({ profile: selectedProfile, groupBy: "hour", from: fetchLeft, to: fetchRight }).then((data) => {
+        if (!cancelled) {
+          setZoomedAnalytics(data);
+          prevZoomRange.current = zoomRange;
+        }
+      }).catch(() => {}).finally(() => {
+        if (!cancelled) setZoomFetching(false);
+      });
+      return () => { cancelled = true; };
+    } else {
+      setZoomedAnalytics(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoomFromParam, zoomToParam, selectedProfile, analyticsData]);
 
   useEffect(() => {
     Promise.all([getProfiles(), getVersion()]).then(([p, v]) => {
@@ -1558,33 +1798,53 @@ function DashboardContent() {
               </div>
             ) : (
               <>
-                {/* Time controls */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground mr-1">Group by:</span>
+                {/* Time window controls */}
+                <div className="flex flex-wrap items-center gap-2">
                   {analyticsLoading && analyticsData && (
                     <span className="size-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                   )}
-                  {(["hour", "day", "week"] as const).map((g) => (
-                    <button
-                      key={g}
-                      onClick={() => setAnalyticsGroupByParam(g)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                        analyticsGroupBy === g
-                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                          : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
-                      }`}
-                    >
-                      {g === "hour" ? "Hours" : g === "day" ? "Days" : "Weeks"}
-                    </button>
-                  ))}
+                  {(["1h", "24h", "7d", "30d", "all", "custom"] as const).map((w) => {
+                    const isActive = timeWindow === w && !zoomRange;
+                    return (
+                      <button
+                        key={w}
+                        onClick={() => { setTimeWindowParam(w); resetZoom(); }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                          isActive
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                            : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
+                        }`}
+                      >
+                        {w === "custom" ? "Custom" : w === "all" ? "All time" : w === "1h" ? "Last hour" : w === "24h" ? "Last 24h" : w === "7d" ? "Last 7d" : "Last 30d"}
+                      </button>
+                    );
+                  })}
+                  {timeWindow === "custom" && (
+                    <div className="flex items-center gap-2 ml-2">
+                      <input
+                        type="date"
+                        value={customFrom}
+                        onChange={(e) => setCustomDates(e.target.value, customTo)}
+                        className="px-2 py-1 rounded-md text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 focus:border-emerald-500/50 focus:outline-none"
+                      />
+                      <span className="text-xs text-muted-foreground">to</span>
+                      <input
+                        type="date"
+                        value={customTo}
+                        onChange={(e) => setCustomDates(customFrom, e.target.value)}
+                        className="px-2 py-1 rounded-md text-xs bg-zinc-800 text-zinc-300 border border-zinc-700 focus:border-emerald-500/50 focus:outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Summary stats */}
                 {(() => {
-                  const totalCostPeriod = analyticsData.buckets.reduce((s, b) => s + b.costUsd, 0);
-                  const totalTokens = analyticsData.buckets.reduce((s, b) => s + b.tokenCount, 0);
-                  const totalSessions = analyticsData.buckets.reduce((s, b) => s + b.sessionCount, 0);
-                  const avgDailyCost = analyticsData.buckets.length > 0 ? totalCostPeriod / analyticsData.buckets.length : 0;
+                  const statBuckets = zoomRange ? zoomedBuckets : analyticsData.buckets;
+                  const totalCostPeriod = statBuckets.reduce((s, b) => s + b.costUsd, 0);
+                  const totalTokens = statBuckets.reduce((s, b) => s + b.tokenCount, 0);
+                  const totalSessions = statBuckets.reduce((s, b) => s + b.sessionCount, 0);
+                  const avgDailyCost = statBuckets.length > 0 ? totalCostPeriod / statBuckets.length : 0;
                   return (
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                       <Card>
@@ -1594,7 +1854,7 @@ function DashboardContent() {
                         <CardContent>
                           <div className="text-3xl font-bold">${totalCostPeriod.toFixed(2)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">
-                            {analyticsGroupBy === "hour" ? "Last 3 days" : "All time"}
+                            {activeLabel}
                           </div>
                         </CardContent>
                       </Card>
@@ -1603,8 +1863,8 @@ function DashboardContent() {
                           <CardTitle className="text-sm font-medium text-muted-foreground">Total Tokens</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-3xl font-bold">{formatTokens(analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalTokens : totalTokens)}</div>
-                          <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
+                          <div className="text-3xl font-bold">{formatTokens(totalTokens)}</div>
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">{activeLabel}</div>
                         </CardContent>
                       </Card>
                       <Card>
@@ -1612,20 +1872,20 @@ function DashboardContent() {
                           <CardTitle className="text-sm font-medium text-muted-foreground">Total Sessions</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-3xl font-bold">{analyticsGroupBy === "hour" && analyticsAllTime ? analyticsAllTime.totalSessions : totalSessions}</div>
-                          <div className="text-[11px] text-muted-foreground/60 mt-1">All time</div>
+                          <div className="text-3xl font-bold">{totalSessions}</div>
+                          <div className="text-[11px] text-muted-foreground/60 mt-1">{activeLabel}</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
                           <CardTitle className="text-sm font-medium text-muted-foreground">
-                            {analyticsGroupBy === "hour" ? "Avg Hourly Cost" : analyticsGroupBy === "week" ? "Avg Weekly Cost" : "Avg Daily Cost"}
+                            {effectiveGroupBy === "hour" ? "Avg Hourly Cost" : "Avg Daily Cost"}
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">${avgDailyCost.toFixed(2)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">
-                            {analyticsGroupBy === "hour" ? "Last 3 days" : "All time"}
+                            {activeLabel}
                           </div>
                         </CardContent>
                       </Card>
@@ -1635,21 +1895,59 @@ function DashboardContent() {
 
                 {/* Total usage over time */}
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle className="text-base font-semibold">Total Usage Over Time</CardTitle>
+                    <div className="flex items-center gap-2">
+                      {!zoomRange && (
+                        <span className="text-[11px] text-muted-foreground/50">Click &amp; drag to zoom</span>
+                      )}
+                      {zoomRange && (
+                        <>
+                          {zoomFetching && (
+                            <span className="size-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                          )}
+                          <span className="text-xs text-emerald-400/80 font-medium">
+                            {(() => {
+                              const fmt = (d: string) => {
+                                const date = parseChartDate(d);
+                                const leftDate = parseChartDate(zoomRange.left);
+                                const rightDate = parseChartDate(zoomRange.right);
+                                const rangeDays = (rightDate.getTime() - leftDate.getTime()) / (24 * 60 * 60 * 1000);
+                                if (rangeDays <= 3) {
+                                  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+                                }
+                                return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                              };
+                              return `${fmt(zoomRange.left)} — ${fmt(zoomRange.right)}`;
+                            })()}
+                          </span>
+                          <button
+                            onClick={resetZoom}
+                            className="px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-300 border border-zinc-700 hover:border-emerald-500/50 hover:text-emerald-400 transition-colors"
+                          >
+                            ↩ Reset zoom
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]">
+                    <div className="h-[300px]" style={{ cursor: isDragging ? "col-resize" : "crosshair", userSelect: isDragging ? "none" : "auto" }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={analyticsData.buckets}>
+                        <AreaChart
+                          data={zoomedBuckets}
+                          onMouseDown={handleZoomMouseDown}
+                          onMouseMove={handleZoomMouseMove}
+                          onMouseUp={handleZoomMouseUp}
+                        >
                           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                          <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
+                          <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => zoomChartDateFormatter(String(d))} />
                           <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                           <Tooltip
                             content={({ active, payload, label }) => {
                               if (!active || !payload?.length) return null;
-                              const bucket = analyticsData.buckets.find((b) => b.date === label);
-                              const dateStr = parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                              const bucket = zoomedBuckets.find((b) => b.date === label);
+                              const dateStr = formatTooltipDate(String(label));
                               const cost = bucket?.costUsd?.toFixed(2) ?? "0";
                               const tokens = formatTokens(bucket?.tokenCount ?? 0);
                               const sess = bucket?.sessionCount ?? 0;
@@ -1672,6 +1970,9 @@ function DashboardContent() {
                               label={{ value: `Limit: $${spendData.limits.amount}`, position: "insideTopRight", fill: "#ef4444", fontSize: 11 }}
                             />
                           )}
+                          {zoomLeft && zoomRight && (
+                            <ReferenceArea x1={zoomLeft} x2={zoomRight} strokeOpacity={0.3} fill="#10b981" fillOpacity={0.15} />
+                          )}
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
@@ -1684,23 +1985,28 @@ function DashboardContent() {
                     <CardTitle className="text-base font-semibold">Usage by Project</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]">
+                    <div className="h-[300px]" style={{ cursor: isDragging ? "col-resize" : "crosshair", userSelect: isDragging ? "none" : "auto" }}>
                       <ResponsiveContainer width="100%" height="100%">
                         {(() => {
                           const projectColors = ["#f59e0b", "#ef4444", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1"];
-                          const dates = analyticsData.buckets.map((b) => b.date);
+                          const dates = zoomedBuckets.map((b) => b.date);
                           const merged = dates.map((date) => {
                             const row: Record<string, string | number> = { date };
-                            for (const proj of analyticsData.byProject) {
+                            for (const proj of zoomedByProject) {
                               const bucket = proj.buckets.find((b) => b.date === date);
                               row[proj.name] = bucket?.costUsd ?? 0;
                             }
                             return row;
                           });
                           return (
-                            <AreaChart data={merged}>
+                            <AreaChart
+                              data={merged}
+                              onMouseDown={handleZoomMouseDown}
+                              onMouseMove={handleZoomMouseMove}
+                              onMouseUp={handleZoomMouseUp}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => zoomChartDateFormatter(String(d))} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                               <Tooltip
                                 content={({ active, payload, label }) => {
@@ -1709,7 +2015,7 @@ function DashboardContent() {
                                   if (!visible.length) return null;
                                   return (
                                     <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
-                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{formatTooltipDate(String(label))}</div>
                                       {visible.map((entry) => (
                                         <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
                                           {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}
@@ -1749,6 +2055,9 @@ function DashboardContent() {
                                   <Area key={proj.projectId} type="monotone" dataKey={proj.name} stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.15} strokeWidth={2} />
                                 );
                               })}
+                              {zoomLeft && zoomRight && (
+                                <ReferenceArea x1={zoomLeft} x2={zoomRight} strokeOpacity={0.3} fill="#10b981" fillOpacity={0.15} />
+                              )}
                             </AreaChart>
                           );
                         })()}
@@ -1763,7 +2072,7 @@ function DashboardContent() {
                     <CardTitle className="text-base font-semibold">Usage by Agent</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]">
+                    <div className="h-[300px]" style={{ cursor: isDragging ? "col-resize" : "crosshair", userSelect: isDragging ? "none" : "auto" }}>
                       <ResponsiveContainer width="100%" height="100%">
                         {(() => {
                           const agentChartColors: Record<string, string> = {
@@ -1772,19 +2081,24 @@ function DashboardContent() {
                             dor: "#14b8a6",
                           };
                           const defaultColors = ["#6366f1", "#ec4899", "#f59e0b", "#84cc16", "#06b6d4"];
-                          const dates = analyticsData.buckets.map((b) => b.date);
+                          const dates = zoomedBuckets.map((b) => b.date);
                           const merged = dates.map((date) => {
                             const row: Record<string, string | number> = { date };
-                            for (const agent of analyticsData.byAgent) {
+                            for (const agent of zoomedByAgent) {
                               const bucket = agent.buckets.find((b) => b.date === date);
                               row[agent.agentId] = bucket?.costUsd ?? 0;
                             }
                             return row;
                           });
                           return (
-                            <AreaChart data={merged}>
+                            <AreaChart
+                              data={merged}
+                              onMouseDown={handleZoomMouseDown}
+                              onMouseMove={handleZoomMouseMove}
+                              onMouseUp={handleZoomMouseUp}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
+                              <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => zoomChartDateFormatter(String(d))} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                               <Tooltip
                                 content={({ active, payload, label }) => {
@@ -1793,7 +2107,7 @@ function DashboardContent() {
                                   if (!visible.length) return null;
                                   return (
                                     <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8, padding: "8px 12px" }}>
-                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                                      <div style={{ color: "#a1a1aa", marginBottom: 4, fontSize: 12 }}>{formatTooltipDate(String(label))}</div>
                                       {visible.map((entry) => (
                                         <div key={String(entry.dataKey)} style={{ color: String(entry.color), fontSize: 12 }}>
                                           {String(entry.dataKey)}: {"$"}{Number(entry.value).toFixed(2)}
@@ -1832,6 +2146,9 @@ function DashboardContent() {
                                   <Area key={agent.agentId} type="monotone" dataKey={agent.agentId} stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.15} strokeWidth={2} />
                                 );
                               })}
+                              {zoomLeft && zoomRight && (
+                                <ReferenceArea x1={zoomLeft} x2={zoomRight} strokeOpacity={0.3} fill="#10b981" fillOpacity={0.15} />
+                              )}
                             </AreaChart>
                           );
                         })()}

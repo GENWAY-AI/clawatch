@@ -1814,7 +1814,7 @@ function DashboardContent() {
                           <CardTitle className="text-sm font-medium text-muted-foreground">Total Tokens</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-3xl font-bold">{formatTokens(zoomRange ? totalTokens : (timeWindow !== "all" && analyticsAllTime ? analyticsAllTime.totalTokens : totalTokens))}</div>
+                          <div className="text-3xl font-bold">{formatTokens(totalTokens)}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">{activeLabel}</div>
                         </CardContent>
                       </Card>
@@ -1823,7 +1823,7 @@ function DashboardContent() {
                           <CardTitle className="text-sm font-medium text-muted-foreground">Total Sessions</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-3xl font-bold">{zoomRange ? totalSessions : (timeWindow !== "all" && analyticsAllTime ? analyticsAllTime.totalSessions : totalSessions)}</div>
+                          <div className="text-3xl font-bold">{totalSessions}</div>
                           <div className="text-[11px] text-muted-foreground/60 mt-1">{activeLabel}</div>
                         </CardContent>
                       </Card>

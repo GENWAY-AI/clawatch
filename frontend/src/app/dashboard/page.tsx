@@ -1805,7 +1805,7 @@ function DashboardContent() {
                   {analyticsLoading && analyticsData && (
                     <span className="size-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                   )}
-                  {(["1h", "24h", "7d", "30d", "all", "custom"] as const).map((w) => {
+                  {(["24h", "7d", "30d", "all", "custom"] as const).map((w) => {
                     const isActive = timeWindow === w && !zoomRange;
                     return (
                       <button
@@ -1817,7 +1817,7 @@ function DashboardContent() {
                             : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
                         }`}
                       >
-                        {w === "custom" ? "Custom" : w === "all" ? "All time" : w === "1h" ? "Last hour" : w === "24h" ? "Last 24h" : w === "7d" ? "Last 7d" : "Last 30d"}
+                        {w === "custom" ? "Custom" : w === "all" ? "All time" : w === "24h" ? "Last 24h" : w === "7d" ? "Last 7d" : "Last 30d"}
                       </button>
                     );
                   })}

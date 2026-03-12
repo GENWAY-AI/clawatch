@@ -166,7 +166,7 @@ Get notified where your team already works.
 |---------|--------|-------------|
 | 📱 **Telegram** | ✅ Live | [Setup docs](https://github.com/GENWAY-AI/clawatch#add-alerts-optional) |
 | 💬 **Slack** | 🔜 Soon | Coming soon |
-| 🎮 **Discord** | 🔜 Soon | Coming soon |
+| 🎮 **Discord** | ✅ Live | [Join our community](https://discord.gg/A7mYjwja) |
 | 📧 **Email** | 🔜 Soon | Coming soon |
 | 📟 **PagerDuty** | 🔜 Soon | Coming soon |
 

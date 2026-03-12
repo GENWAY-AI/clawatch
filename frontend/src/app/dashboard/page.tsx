@@ -523,24 +523,32 @@ function DashboardContent() {
     }
     return periodLabel;
   })();
-  // Zoomed buckets: filter data to zoom range if set
-  const zoomedBuckets = zoomRange && analyticsData
-    ? analyticsData.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right)
+  // Re-fetch with hourly granularity when zoomed into a small range
+  const [zoomedAnalytics, setZoomedAnalytics] = useState<AnalyticsData | null>(null);
+  const [zoomFetching, setZoomFetching] = useState(false);
+
+  // Zoomed buckets: use re-fetched hourly data if available, otherwise filter original
+  const zoomSource = zoomedAnalytics || analyticsData;
+  const zoomedBuckets = zoomRange && zoomSource
+    ? (zoomedAnalytics ? zoomedAnalytics.buckets : zoomSource.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right))
     : analyticsData?.buckets ?? [];
 
-  const zoomedByProject = zoomRange && analyticsData
-    ? analyticsData.byProject.map((proj) => ({
+  const zoomedByProject = zoomRange && zoomSource
+    ? (zoomedAnalytics ? zoomedAnalytics.byProject : analyticsData!.byProject.map((proj) => ({
         ...proj,
         buckets: proj.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right),
-      }))
+      })))
     : analyticsData?.byProject ?? [];
 
-  const zoomedByAgent = zoomRange && analyticsData
-    ? analyticsData.byAgent.map((agent) => ({
+  const zoomedByAgent = zoomRange && zoomSource
+    ? (zoomedAnalytics ? zoomedAnalytics.byAgent : analyticsData!.byAgent.map((agent) => ({
         ...agent,
         buckets: agent.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right),
-      }))
+      })))
     : analyticsData?.byAgent ?? [];
+
+  // Effective groupBy for chart formatting: hourly when zoomed with hourly data
+  const effectiveGroupBy = zoomedAnalytics ? "hour" : analyticsGroupBy;
 
   // Chart zoom handlers
   const [isDragging, setIsDragging] = useState(false);
@@ -591,7 +599,7 @@ function DashboardContent() {
         return `${month} ${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
       }
     }
-    return formatChartDate(d, analyticsGroupBy);
+    return formatChartDate(d, effectiveGroupBy);
   };
 
   // Reset zoom when time window changes
@@ -724,6 +732,31 @@ function DashboardContent() {
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, selectedProfile, timeWindow, customFrom, customTo]);
+
+  // Re-fetch with hourly granularity when zoomed into a small range
+  useEffect(() => {
+    if (!zoomRange || !analyticsData) {
+      setZoomedAnalytics(null);
+      return;
+    }
+    const leftDate = parseChartDate(zoomRange.left);
+    const rightDate = parseChartDate(zoomRange.right);
+    const rangeDays = (rightDate.getTime() - leftDate.getTime()) / (24 * 60 * 60 * 1000);
+    // Only re-fetch hourly if range <= 7 days and we're currently on daily grouping
+    if (rangeDays <= 7 && analyticsGroupBy === "day") {
+      let cancelled = false;
+      setZoomFetching(true);
+      getAnalytics({ profile: selectedProfile, groupBy: "hour", from: zoomRange.left, to: zoomRange.right }).then((data) => {
+        if (!cancelled) setZoomedAnalytics(data);
+      }).catch(() => {}).finally(() => {
+        if (!cancelled) setZoomFetching(false);
+      });
+      return () => { cancelled = true; };
+    } else {
+      setZoomedAnalytics(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoomRange, selectedProfile]);
 
   useEffect(() => {
     Promise.all([getProfiles(), getVersion()]).then(([p, v]) => {
@@ -1797,7 +1830,7 @@ function DashboardContent() {
                       <Card>
                         <CardHeader className="pb-2">
                           <CardTitle className="text-sm font-medium text-muted-foreground">
-                            {analyticsGroupBy === "hour" ? "Avg Hourly Cost" : "Avg Daily Cost"}
+                            {effectiveGroupBy === "hour" ? "Avg Hourly Cost" : "Avg Daily Cost"}
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
@@ -1821,6 +1854,9 @@ function DashboardContent() {
                       )}
                       {zoomRange && (
                         <>
+                          {zoomFetching && (
+                            <span className="size-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                          )}
                           <span className="text-xs text-emerald-400/80 font-medium">
                             {(() => {
                               const fmt = (d: string) => {

@@ -456,10 +456,14 @@ function DashboardContent() {
   const [showingDemoData, setShowingDemoData] = useState(false);
   const [showCostSettings, setShowCostSettings] = useState(false);
 
-  // Chart zoom state
+  // Chart zoom state — restore from URL params if present
   const [zoomLeft, setZoomLeft] = useState<string | null>(null);
   const [zoomRight, setZoomRight] = useState<string | null>(null);
-  const [zoomRange, setZoomRange] = useState<{ left: string; right: string } | null>(null);
+  const initZoomFrom = searchParams.get("zoomFrom");
+  const initZoomTo = searchParams.get("zoomTo");
+  const [zoomRange, setZoomRange] = useState<{ left: string; right: string } | null>(
+    initZoomFrom && initZoomTo ? { left: initZoomFrom, right: initZoomTo } : null
+  );
 
   const selectedProfile = searchParams.get("profile") || "default";
   type TimeWindow = "1h" | "24h" | "7d" | "30d" | "all" | "custom";
@@ -603,6 +607,20 @@ function DashboardContent() {
     prevZoomRange.current = null;
   };
 
+  // Persist zoom range to URL params
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (zoomRange) {
+      params.set("zoomFrom", zoomRange.left);
+      params.set("zoomTo", zoomRange.right);
+    } else {
+      params.delete("zoomFrom");
+      params.delete("zoomTo");
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoomRange]);
+
   // Dynamic date formatting based on zoom level
   const zoomChartDateFormatter = (d: string) => {
     if (zoomRange) {
@@ -701,6 +719,8 @@ function DashboardContent() {
   function setTimeWindowParam(w: TimeWindow) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("groupBy");
+    params.delete("zoomFrom");
+    params.delete("zoomTo");
     if (w === "7d") {
       params.delete("window");
     } else {

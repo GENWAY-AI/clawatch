@@ -831,10 +831,12 @@ router.get("/analytics", async (req: Request, res: Response) => {
     }
 
     // Helper: generate all date keys between min and max
+    // Ensure dates are parsed as UTC (append Z if missing, since bucket keys don't include it)
     function generateAllKeys(minDate: string, maxDate: string): string[] {
       const keys: string[] = [];
-      const current = new Date(minDate);
-      const end = new Date(maxDate);
+      const toUTC = (s: string) => s.endsWith("Z") ? s : (s.includes("T") ? s + ":00Z" : s + "T00:00:00Z");
+      const current = new Date(toUTC(minDate));
+      const end = new Date(toUTC(maxDate));
       while (current <= end) {
         if (groupBy === "hour") {
           keys.push(current.toISOString().slice(0, 13) + ":00");

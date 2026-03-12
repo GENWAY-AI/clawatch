@@ -395,13 +395,32 @@ const mockAnalyticsByGroup: Record<string, AnalyticsData> = {
   day: buildMockAnalytics("day"),
   week: buildMockAnalytics("week"),
 };
+// Filter analytics data by from/to date range
+function filterAnalyticsByRange(data: AnalyticsData, from?: string, to?: string): AnalyticsData {
+  if (!from && !to) return data;
+  const fromMs = from ? new Date(from.includes("T") && !from.endsWith("Z") ? from + ":00Z" : from + (from.includes("T") ? "" : "T00:00:00Z")).getTime() : 0;
+  const toMs = to ? new Date(to.includes("T") && !to.endsWith("Z") ? to + ":00Z" : to + (to.includes("T") ? "" : "T23:59:59Z")).getTime() : Infinity;
+  const inRange = (date: string) => {
+    const d = date.includes("T") && !date.endsWith("Z") ? new Date(date + ":00Z") : new Date(date + (date.includes("T") ? "" : "T00:00:00Z"));
+    return d.getTime() >= fromMs && d.getTime() <= toMs;
+  };
+  return {
+    buckets: data.buckets.filter(b => inRange(b.date)),
+    byAgent: data.byAgent.map(a => ({ ...a, buckets: a.buckets.filter(b => inRange(b.date)) })),
+    byProject: data.byProject.map(p => ({ ...p, buckets: p.buckets.filter(b => inRange(b.date)) })),
+  };
+}
+
 export async function getAnalytics(params: {
   profile?: string;
   groupBy?: string;
   from?: string;
   to?: string;
 }): Promise<AnalyticsData> {
-  if (USE_MOCK) return mockAnalyticsByGroup[params.groupBy || "day"] || mockAnalyticsByGroup.day;
+  if (USE_MOCK) {
+    const data = mockAnalyticsByGroup[params.groupBy || "day"] || mockAnalyticsByGroup.day;
+    return filterAnalyticsByRange(data, params.from, params.to);
+  }
   try {
     const qs = new URLSearchParams();
     if (params.profile) qs.set("profile", params.profile);
@@ -412,7 +431,8 @@ export async function getAnalytics(params: {
     return await fetchJson<AnalyticsData>(`/api/analytics${query ? `?${query}` : ""}`);
   } catch {
     console.warn("API unreachable, falling back to mock analytics data");
-    return mockAnalyticsByGroup[params.groupBy || "day"] || mockAnalyticsByGroup.day;
+    const data = mockAnalyticsByGroup[params.groupBy || "day"] || mockAnalyticsByGroup.day;
+    return filterAnalyticsByRange(data, params.from, params.to);
   }
 }
 

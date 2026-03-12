@@ -5,7 +5,7 @@
   
   ### **Monitor, control, and auto-fix your AI agents.**
   
-  *Open source agent operations platform — real-time observability, cost guardrails, and autonomous issue resolution*
+  *Open source observability for OpenClaw agents — real-time observability, cost guardrails, and autonomous issue resolution*
   
   [![npm version](https://img.shields.io/npm/v/clawatch.svg?style=flat&color=00C853)](https://www.npmjs.com/package/clawatch)
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](https://opensource.org/licenses/MIT)

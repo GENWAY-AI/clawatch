@@ -403,8 +403,9 @@ export default function LandingPage() {
             Ready to see what your agents are doing?
           </h2>
           <div className="max-w-md mx-auto mb-8">
-            <TerminalBlock copyText="npm install -g clawatch">
+            <TerminalBlock copyText="npm install -g clawatch && clawatch start">
               <div><span className="text-emerald-400">$</span> <span className="text-gray-300">npm install -g clawatch</span></div>
+              <div className="mt-1"><span className="text-emerald-400">$</span> <span className="text-gray-300">clawatch start</span></div>
             </TerminalBlock>
           </div>
           <Link href="/dashboard">

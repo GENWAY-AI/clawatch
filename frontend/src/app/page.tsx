@@ -50,26 +50,26 @@ function TerminalBlock({ children, copyText }: { children: React.ReactNode; copy
 
 const features = [
   {
-    title: 'Cost Monitoring & Thresholds',
-    description: 'Track spend per agent in real-time. Set daily or monthly limits with automatic alerts when thresholds are approached or exceeded.',
+    title: 'Cost Guardrails & Auto-Pause',
+    description: 'Set daily or monthly spend limits per agent. When a threshold is hit, ClaWatch auto-pauses the agent before it drains your credits — no human in the loop required.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
       </svg>
     ),
   },
   {
-    title: 'Smart Alerts to Your Phone',
-    description: 'Get instant notifications for stuck agents, errors, cost spikes, and anomalies. Telegram, Slack, or webhook — your choice.',
+    title: 'Autonomous Issue Resolution',
+    description: 'Stuck in a loop? Crashed mid-task? ClaWatch detects common failure patterns and auto-resolves them — restart agents, kill runaway sessions, and recover gracefully.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17l-5.385-5.386m0 0a7.5 7.5 0 1010.607-10.607 7.5 7.5 0 00-10.607 10.607zM15.75 15.75L20.25 20.25M6 18L18 6" />
       </svg>
     ),
   },
   {
     title: 'Control Agents from Anywhere',
-    description: 'Pause, resume, or stop agents directly from the dashboard or your phone. One click, instant effect.',
+    description: 'Pause, resume, or stop agents directly from the dashboard or your phone. One click, instant effect — even at 3 AM from your bed.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
@@ -77,20 +77,20 @@ const features = [
     ),
   },
   {
-    title: 'Unified Session View',
-    description: 'Group sessions into projects for a bird\'s-eye view. See cost, timeline, and agent breakdown across related work.',
+    title: 'Smart Alerts That Explain Why',
+    description: 'Not just "agent crashed." ClaWatch tells you what failed, why it happened, and what it did about it. Telegram, Slack, or webhook — your choice.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
       </svg>
     ),
   },
   {
-    title: 'Smart Error Insights',
-    description: 'No more digging through scattered logs. ClaWatch surfaces errors in plain language with context and suggested fixes.',
+    title: 'Unified Session View',
+    description: 'Group sessions into projects for a bird\'s-eye view. See cost, timeline, and agent breakdown across related work. Interactive charts with zoom.',
     icon: (
       <svg className="size-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
       </svg>
     ),
   },

@@ -166,7 +166,7 @@ Get notified where your team already works.
 |---------|--------|-------------|
 | 📱 **Telegram** | ✅ Live | [Setup docs](https://github.com/GENWAY-AI/clawatch#add-alerts-optional) |
 | 💬 **Slack** | 🔜 Soon | Coming soon |
-| 🎮 **Discord** | ✅ Live | [Join our community](https://discord.gg/A7mYjwja) |
+| 🎮 **Discord** | 🔜 Soon | Coming soon |
 | 📧 **Email** | 🔜 Soon | Coming soon |
 | 📟 **PagerDuty** | 🔜 Soon | Coming soon |
 
@@ -318,6 +318,7 @@ Check out issues labeled [`good first issue`](https://github.com/GENWAY-AI/clawa
 
 - **GitHub Discussions**: [Ask questions, share tips](https://github.com/GENWAY-AI/clawatch/discussions)
 - **GitHub Issues**: [Report bugs, request features](https://github.com/GENWAY-AI/clawatch/issues)
+- **Discord**: [Join our community](https://discord.gg/A7mYjwja)
 - **Email**: hello@genway.ai
 
 ---

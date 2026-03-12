@@ -185,6 +185,9 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <a href="https://discord.gg/7jSV4x5g" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-[#5865F2] transition-colors" title="Join Discord">
+              <DiscordIcon className="size-5" />
+            </a>
             <a
               href="https://github.com/GENWAY-AI/clawatch"
               target="_blank"
@@ -422,6 +425,9 @@ export default function LandingPage() {
           <div className="flex items-center gap-6">
             <a href="https://github.com/GENWAY-AI/clawatch" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
               GitHub
+            </a>
+            <a href="https://discord.gg/7jSV4x5g" target="_blank" rel="noopener noreferrer" className="hover:text-[#5865F2] transition-colors">
+              Discord
             </a>
             <Link href="/dashboard" className="hover:text-white transition-colors">
               Dashboard

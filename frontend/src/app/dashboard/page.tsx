@@ -593,6 +593,7 @@ function DashboardContent() {
   // Chart zoom handlers
   const [isDragging, setIsDragging] = useState(false);
   const handleZoomMouseDown = (e: Record<string, unknown>) => {
+    if (showingDemoData) return; // Zoom disabled in demo mode
     if (e?.activeLabel) {
       setZoomLeft(String(e.activeLabel));
       setIsDragging(true);
@@ -1900,8 +1901,11 @@ function DashboardContent() {
                   <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle className="text-base font-semibold">Total Usage Over Time</CardTitle>
                     <div className="flex items-center gap-2">
-                      {!zoomRange && (
+                      {!zoomRange && !showingDemoData && (
                         <span className="text-[11px] text-muted-foreground/50">Click &amp; drag to zoom</span>
+                      )}
+                      {showingDemoData && (
+                        <span className="text-[11px] text-muted-foreground/50">Zoom available with live data</span>
                       )}
                       {zoomRange && (
                         <>

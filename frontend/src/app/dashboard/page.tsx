@@ -527,24 +527,32 @@ function DashboardContent() {
   const [zoomedAnalytics, setZoomedAnalytics] = useState<AnalyticsData | null>(null);
   const [zoomFetching, setZoomFetching] = useState(false);
 
-  // Zoomed buckets: use re-fetched hourly data if available, otherwise filter original
+  // Zoomed buckets: always filter to exact zoom range (API may return wider range)
   const zoomSource = zoomedAnalytics || analyticsData;
+  const inZoomRange = (date: string) => {
+    if (!zoomRange) return true;
+    // Compare using parsed timestamps for reliable comparison across date formats
+    const t = parseChartDate(date).getTime();
+    const left = parseChartDate(zoomRange.left).getTime();
+    const right = parseChartDate(zoomRange.right).getTime();
+    return t >= left && t <= right;
+  };
   const zoomedBuckets = zoomRange && zoomSource
-    ? (zoomedAnalytics ? zoomedAnalytics.buckets : zoomSource.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right))
+    ? (zoomedAnalytics ? zoomedAnalytics.buckets.filter((b) => inZoomRange(b.date)) : zoomSource.buckets.filter((b) => inZoomRange(b.date)))
     : analyticsData?.buckets ?? [];
 
   const zoomedByProject = zoomRange && zoomSource
-    ? (zoomedAnalytics ? zoomedAnalytics.byProject : analyticsData!.byProject.map((proj) => ({
+    ? (zoomedAnalytics ? zoomedAnalytics.byProject : analyticsData!.byProject).map((proj) => ({
         ...proj,
-        buckets: proj.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right),
-      })))
+        buckets: proj.buckets.filter((b) => inZoomRange(b.date)),
+      }))
     : analyticsData?.byProject ?? [];
 
   const zoomedByAgent = zoomRange && zoomSource
-    ? (zoomedAnalytics ? zoomedAnalytics.byAgent : analyticsData!.byAgent.map((agent) => ({
+    ? (zoomedAnalytics ? zoomedAnalytics.byAgent : analyticsData!.byAgent).map((agent) => ({
         ...agent,
-        buckets: agent.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right),
-      })))
+        buckets: agent.buckets.filter((b) => inZoomRange(b.date)),
+      }))
     : analyticsData?.byAgent ?? [];
 
   // Effective groupBy for chart formatting: hourly when zoomed with hourly data

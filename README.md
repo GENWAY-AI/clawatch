@@ -3,9 +3,9 @@
   
   # ClaWatch
   
-  ### **Know what your agents are doing. Right now.**
+  ### **Monitor, control, and auto-fix your AI agents.**
   
-  *Open source observability for OpenClaw agents — real-time monitoring, cost tracking, and smart alerts*
+  *Open source observability for OpenClaw agents — real-time observability, cost guardrails, and autonomous issue resolution*
   
   [![npm version](https://img.shields.io/npm/v/clawatch.svg?style=flat&color=00C853)](https://www.npmjs.com/package/clawatch)
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](https://opensource.org/licenses/MIT)
@@ -17,7 +17,9 @@
 
 ## Why ClaWatch?
 
-Your OpenClaw agents spawn sub-agents, burn tokens, call tools, and sometimes get stuck in loops or blow through API credits. **ClaWatch gives you visibility** — track every heartbeat, session, and dollar spent in real-time.
+Your AI agents spawn sub-agents, burn tokens, call tools, and sometimes get stuck in loops or blow through API credits. **ClaWatch doesn't just show you what's happening — it steps in.** Set cost thresholds that auto-pause runaway agents. Get intelligent alerts that explain *why* something broke. Let the auto-fixer resolve common failures before you even wake up.
+
+Visibility is table stakes. ClaWatch gives you **control and autonomy** — so your agents run reliably while you sleep.
 
 Built for teams shipping AI products. Open source. Free forever.
 
@@ -29,14 +31,14 @@ Built for teams shipping AI products. Open source. Free forever.
 <tr>
 <td width="50%">
 
-### 💸 **Cost Monitoring & Thresholds**
-Track spend per agent in real-time. Set daily or monthly limits with automatic alerts when thresholds are approached or exceeded.
+### 🛡️ **Cost Guardrails & Auto-Pause**
+Set daily or monthly spend limits per agent. When a threshold is hit, ClaWatch auto-pauses the agent before it drains your credits — no human in the loop required.
 
 </td>
 <td width="50%">
 
-### 🚨 **Smart Alerts to Your Phone**
-Get instant notifications for stuck agents, errors, cost spikes, and anomalies. Telegram, Slack, or webhook — your choice.
+### 🔧 **Autonomous Issue Resolution**
+Stuck in a loop? Crashed mid-task? ClaWatch detects common failure patterns and auto-resolves them — restart agents, kill runaway sessions, and recover gracefully.
 
 </td>
 </tr>
@@ -44,21 +46,21 @@ Get instant notifications for stuck agents, errors, cost spikes, and anomalies. 
 <td>
 
 ### ⏯️ **Control Agents from Anywhere**
-Pause, resume, or stop agents directly from the dashboard or your phone. One click, instant effect.
+Pause, resume, or stop agents directly from the dashboard or your phone. One click, instant effect — even at 3 AM from your bed.
 
 </td>
 <td>
 
-### 📊 **Unified Session View**
-Group sessions into projects for a bird's-eye view. See cost, timeline, and agent breakdown across related work.
+### 🚨 **Smart Alerts That Explain Why**
+Not just "agent crashed." ClaWatch tells you *what* failed, *why* it happened, and *what it did about it*. Telegram, Slack, or webhook — your choice.
 
 </td>
 </tr>
 <tr>
 <td>
 
-### 🔍 **Smart Error Insights**
-No more digging through scattered logs. ClaWatch surfaces errors in plain language with context and suggested fixes.
+### 📊 **Unified Session View**
+Group sessions into projects for a bird's-eye view. See cost, timeline, and agent breakdown across related work. Interactive charts with zoom.
 
 </td>
 <td>
@@ -273,13 +275,14 @@ clawatch/
 - [x] Agent control (pause/resume)
 - [x] Docker support for self-hosting
 - [x] Pure WASM SQLite (no native deps)
+- [x] Interactive analytics with chart zoom & URL persistence
 
 ### 🚧 In Progress
 
+- [ ] Agent Auto-Fixer (autonomous failure detection & recovery)
 - [ ] Slack integration
 - [ ] Discord bot
 - [ ] Custom alert rules builder
-- [ ] Historical trend charts (7d/30d)
 
 ### 🔮 Coming Soon
 

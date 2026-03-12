@@ -534,7 +534,12 @@ function DashboardContent() {
     // Compare using parsed timestamps for reliable comparison across date formats
     const t = parseChartDate(date).getTime();
     const left = parseChartDate(zoomRange.left).getTime();
-    const right = parseChartDate(zoomRange.right).getTime();
+    let right = parseChartDate(zoomRange.right).getTime();
+    // If right is a date-only string (no time component), extend to end of that day
+    // so hourly data within the day isn't excluded
+    if (!zoomRange.right.includes("T")) {
+      right += 24 * 60 * 60 * 1000 - 1;
+    }
     return t >= left && t <= right;
   };
   const zoomedBuckets = zoomRange && zoomSource
@@ -582,13 +587,10 @@ function DashboardContent() {
     setIsDragging(false);
     if (zoomLeft && zoomRight && zoomLeft !== zoomRight) {
       const [left, right] = [zoomLeft, zoomRight].sort();
-      // Enforce minimum 1-hour zoom range
-      const leftDate = parseChartDate(left);
-      const rightDate = parseChartDate(right);
-      const diffMs = rightDate.getTime() - leftDate.getTime();
-      if (diffMs >= 60 * 60 * 1000) {
-        setZoomRange({ left, right });
-      }
+      // Enforce minimum zoom: at least 2 different data points selected
+      // For daily data, adjacent days have 24h diff; for hourly, 1h diff
+      // Allow any selection where left !== right (already checked above)
+      setZoomRange({ left, right });
     }
     setZoomLeft(null);
     setZoomRight(null);

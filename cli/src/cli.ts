@@ -599,4 +599,128 @@ program
     }
   });
 
+// --- Update command ---
+program
+  .command('update')
+  .description('Check for updates and upgrade clawatch to the latest version')
+  .option('--check', 'Only check for updates without installing')
+  .action(async (opts) => {
+    const currentVersion = pkg.version;
+    console.log(chalk.bold('\n🔄 ClaWatch Update\n'));
+    console.log(`  Current version: ${chalk.cyan(currentVersion)}`);
+
+    // 1. Fetch latest version from npm registry
+    console.log(chalk.gray('  Checking npm registry...'));
+    let latestVersion: string;
+    try {
+      latestVersion = execSync('npm view clawatch version 2>/dev/null', { encoding: 'utf-8' }).trim();
+    } catch {
+      console.log(chalk.red('\n  ❌ Could not reach npm registry.'));
+      console.log(chalk.yellow('     Check your internet connection and try again.\n'));
+      process.exit(1);
+    }
+
+    if (!latestVersion) {
+      console.log(chalk.red('\n  ❌ Could not determine latest version.\n'));
+      process.exit(1);
+    }
+
+    console.log(`  Latest version:  ${chalk.cyan(latestVersion)}`);
+
+    // 2. Compare versions
+    if (currentVersion === latestVersion) {
+      console.log(chalk.green('\n  ✅ Already on the latest version!\n'));
+      process.exit(0);
+    }
+
+    console.log(chalk.yellow(`\n  ⬆️  Update available: ${currentVersion} → ${latestVersion}`));
+
+    // 3. If --check, stop here
+    if (opts.check) {
+      console.log(chalk.gray('  Run "clawatch update" (without --check) to install.\n'));
+      process.exit(0);
+    }
+
+    // 4. Detect package manager and install type
+    const detectPackageManager = (): { manager: string; command: string } | null => {
+      // Check if installed globally via npm
+      try {
+        const npmGlobalPrefix = execSync('npm prefix -g 2>/dev/null', { encoding: 'utf-8' }).trim();
+        const npmGlobalModules = path.join(npmGlobalPrefix, 'lib', 'node_modules', 'clawatch');
+        if (fs.existsSync(npmGlobalModules)) {
+          return { manager: 'npm', command: 'npm update -g clawatch' };
+        }
+        // Also check without /lib (Windows-style)
+        const npmGlobalModulesAlt = path.join(npmGlobalPrefix, 'node_modules', 'clawatch');
+        if (fs.existsSync(npmGlobalModulesAlt)) {
+          return { manager: 'npm', command: 'npm update -g clawatch' };
+        }
+      } catch { /* npm not available */ }
+
+      // Check yarn global
+      try {
+        const yarnGlobalDir = execSync('yarn global dir 2>/dev/null', { encoding: 'utf-8' }).trim();
+        if (yarnGlobalDir && fs.existsSync(path.join(yarnGlobalDir, 'node_modules', 'clawatch'))) {
+          return { manager: 'yarn', command: 'yarn global upgrade clawatch' };
+        }
+      } catch { /* yarn not available */ }
+
+      // Check pnpm global
+      try {
+        const pnpmGlobalDir = execSync('pnpm root -g 2>/dev/null', { encoding: 'utf-8' }).trim();
+        if (pnpmGlobalDir && fs.existsSync(path.join(pnpmGlobalDir, 'clawatch'))) {
+          return { manager: 'pnpm', command: 'pnpm update -g clawatch' };
+        }
+      } catch { /* pnpm not available */ }
+
+      // Fallback: try npm if it exists
+      try {
+        execSync('npm --version 2>/dev/null', { encoding: 'utf-8' });
+        return { manager: 'npm', command: 'npm install -g clawatch@latest' };
+      } catch { /* no npm */ }
+
+      return null;
+    };
+
+    const pm = detectPackageManager();
+
+    if (!pm) {
+      console.log(chalk.red('\n  ❌ Could not detect package manager (npm, yarn, or pnpm).'));
+      console.log(chalk.yellow('     Install one first: https://nodejs.org\n'));
+      process.exit(1);
+    }
+
+    // 5. Prompt user (unless stdin is not a TTY)
+    const readline = require('readline');
+    if (process.stdin.isTTY) {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(chalk.white(`\n  Update via ${pm.manager}? [Y/n] `), (a: string) => {
+          rl.close();
+          resolve(a.trim().toLowerCase());
+        });
+      });
+
+      if (answer && answer !== 'y' && answer !== 'yes') {
+        console.log(chalk.yellow('\n  Update cancelled.\n'));
+        process.exit(0);
+      }
+    }
+
+    // 6. Run update
+    console.log(chalk.blue(`\n  Running: ${pm.command}\n`));
+    try {
+      execSync(pm.command, { stdio: 'inherit' });
+      console.log(chalk.green.bold(`\n  ✅ Updated to ${latestVersion}!`));
+      console.log(chalk.gray('     Restart ClaWatch to use the new version.\n'));
+    } catch (err) {
+      console.log(chalk.red(`\n  ❌ Update failed. Try manually: ${pm.command}`));
+      if (pm.manager === 'npm') {
+        console.log(chalk.yellow('     You may need: sudo npm install -g clawatch@latest'));
+      }
+      console.log('');
+      process.exit(1);
+    }
+  });
+
 program.parse();

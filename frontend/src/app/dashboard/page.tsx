@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, SessionStatus, Project, Profile, AnalyticsData, SpendData, CostLimits } from "@/lib/types";
 import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, createProject, getProfiles, getVersion, setSessionProjects, removeSessionProject, getAnalytics, getSpend, setCostLimits, isUsingMockData } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, ReferenceArea } from "recharts";
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -456,6 +456,11 @@ function DashboardContent() {
   const [showingDemoData, setShowingDemoData] = useState(false);
   const [showCostSettings, setShowCostSettings] = useState(false);
 
+  // Chart zoom state
+  const [zoomLeft, setZoomLeft] = useState<string | null>(null);
+  const [zoomRight, setZoomRight] = useState<string | null>(null);
+  const [zoomRange, setZoomRange] = useState<{ left: string; right: string } | null>(null);
+
   const selectedProfile = searchParams.get("profile") || "default";
   type TimeWindow = "1h" | "24h" | "7d" | "30d" | "all" | "custom";
   const timeWindow = (searchParams.get("window") as TimeWindow) || "7d";
@@ -504,6 +509,58 @@ function DashboardContent() {
   const periodLabel = timeWindow === "custom"
     ? (customFrom && customTo ? `${customFrom} – ${customTo}` : "Custom range")
     : (timeWindowConfig[timeWindow]?.periodLabel ?? "Last 7 days");
+  // Zoomed buckets: filter data to zoom range if set
+  const zoomedBuckets = zoomRange && analyticsData
+    ? analyticsData.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right)
+    : analyticsData?.buckets ?? [];
+
+  const zoomedByProject = zoomRange && analyticsData
+    ? analyticsData.byProject.map((proj) => ({
+        ...proj,
+        buckets: proj.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right),
+      }))
+    : analyticsData?.byProject ?? [];
+
+  const zoomedByAgent = zoomRange && analyticsData
+    ? analyticsData.byAgent.map((agent) => ({
+        ...agent,
+        buckets: agent.buckets.filter((b) => b.date >= zoomRange.left && b.date <= zoomRange.right),
+      }))
+    : analyticsData?.byAgent ?? [];
+
+  // Chart zoom handlers
+  const handleZoomMouseDown = (e: Record<string, unknown>) => {
+    if (e?.activeLabel) setZoomLeft(String(e.activeLabel));
+  };
+  const handleZoomMouseMove = (e: Record<string, unknown>) => {
+    if (zoomLeft && e?.activeLabel) setZoomRight(String(e.activeLabel));
+  };
+  const handleZoomMouseUp = () => {
+    if (zoomLeft && zoomRight && zoomLeft !== zoomRight) {
+      const [left, right] = [zoomLeft, zoomRight].sort();
+      // Enforce minimum 1-hour zoom range
+      const leftDate = parseChartDate(left);
+      const rightDate = parseChartDate(right);
+      const diffMs = rightDate.getTime() - leftDate.getTime();
+      if (diffMs >= 60 * 60 * 1000) {
+        setZoomRange({ left, right });
+      }
+    }
+    setZoomLeft(null);
+    setZoomRight(null);
+  };
+  const resetZoom = () => {
+    setZoomRange(null);
+    setZoomLeft(null);
+    setZoomRight(null);
+  };
+
+  // Reset zoom when time window changes
+  useEffect(() => {
+    resetZoom();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeWindow, customFrom, customTo]);
+
   const alertFilter = (searchParams.get("alertSeverity") as AlertFilter) || "all";
   const alertPage = Math.max(1, parseInt(searchParams.get("alertPage") || "1", 10));
   const sessionPage = Math.max(1, parseInt(searchParams.get("sessionPage") || "1", 10));
@@ -1659,10 +1716,11 @@ function DashboardContent() {
 
                 {/* Summary stats */}
                 {(() => {
-                  const totalCostPeriod = analyticsData.buckets.reduce((s, b) => s + b.costUsd, 0);
-                  const totalTokens = analyticsData.buckets.reduce((s, b) => s + b.tokenCount, 0);
-                  const totalSessions = analyticsData.buckets.reduce((s, b) => s + b.sessionCount, 0);
-                  const avgDailyCost = analyticsData.buckets.length > 0 ? totalCostPeriod / analyticsData.buckets.length : 0;
+                  const statBuckets = zoomRange ? zoomedBuckets : analyticsData.buckets;
+                  const totalCostPeriod = statBuckets.reduce((s, b) => s + b.costUsd, 0);
+                  const totalTokens = statBuckets.reduce((s, b) => s + b.tokenCount, 0);
+                  const totalSessions = statBuckets.reduce((s, b) => s + b.sessionCount, 0);
+                  const avgDailyCost = statBuckets.length > 0 ? totalCostPeriod / statBuckets.length : 0;
                   return (
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                       <Card>
@@ -1713,20 +1771,38 @@ function DashboardContent() {
 
                 {/* Total usage over time */}
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle className="text-base font-semibold">Total Usage Over Time</CardTitle>
+                    <div className="flex items-center gap-2">
+                      {!zoomRange && (
+                        <span className="text-[11px] text-muted-foreground/50">Click &amp; drag to zoom</span>
+                      )}
+                      {zoomRange && (
+                        <button
+                          onClick={resetZoom}
+                          className="px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-300 border border-zinc-700 hover:border-emerald-500/50 hover:text-emerald-400 transition-colors"
+                        >
+                          ↩ Reset zoom
+                        </button>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]">
+                    <div className="h-[300px]" style={{ cursor: zoomLeft ? "col-resize" : "crosshair" }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={analyticsData.buckets}>
+                        <AreaChart
+                          data={zoomedBuckets}
+                          onMouseDown={handleZoomMouseDown}
+                          onMouseMove={handleZoomMouseMove}
+                          onMouseUp={handleZoomMouseUp}
+                        >
                           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                           <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
                           <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
                           <Tooltip
                             content={({ active, payload, label }) => {
                               if (!active || !payload?.length) return null;
-                              const bucket = analyticsData.buckets.find((b) => b.date === label);
+                              const bucket = zoomedBuckets.find((b) => b.date === label);
                               const dateStr = parseChartDate(String(label)).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
                               const cost = bucket?.costUsd?.toFixed(2) ?? "0";
                               const tokens = formatTokens(bucket?.tokenCount ?? 0);
@@ -1750,6 +1826,9 @@ function DashboardContent() {
                               label={{ value: `Limit: $${spendData.limits.amount}`, position: "insideTopRight", fill: "#ef4444", fontSize: 11 }}
                             />
                           )}
+                          {zoomLeft && zoomRight && (
+                            <ReferenceArea x1={zoomLeft} x2={zoomRight} strokeOpacity={0.3} fill="#10b981" fillOpacity={0.15} />
+                          )}
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
@@ -1762,21 +1841,26 @@ function DashboardContent() {
                     <CardTitle className="text-base font-semibold">Usage by Project</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]">
+                    <div className="h-[300px]" style={{ cursor: zoomLeft ? "col-resize" : "crosshair" }}>
                       <ResponsiveContainer width="100%" height="100%">
                         {(() => {
                           const projectColors = ["#f59e0b", "#ef4444", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1"];
-                          const dates = analyticsData.buckets.map((b) => b.date);
+                          const dates = zoomedBuckets.map((b) => b.date);
                           const merged = dates.map((date) => {
                             const row: Record<string, string | number> = { date };
-                            for (const proj of analyticsData.byProject) {
+                            for (const proj of zoomedByProject) {
                               const bucket = proj.buckets.find((b) => b.date === date);
                               row[proj.name] = bucket?.costUsd ?? 0;
                             }
                             return row;
                           });
                           return (
-                            <AreaChart data={merged}>
+                            <AreaChart
+                              data={merged}
+                              onMouseDown={handleZoomMouseDown}
+                              onMouseMove={handleZoomMouseMove}
+                              onMouseUp={handleZoomMouseUp}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                               <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
@@ -1827,6 +1911,9 @@ function DashboardContent() {
                                   <Area key={proj.projectId} type="monotone" dataKey={proj.name} stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.15} strokeWidth={2} />
                                 );
                               })}
+                              {zoomLeft && zoomRight && (
+                                <ReferenceArea x1={zoomLeft} x2={zoomRight} strokeOpacity={0.3} fill="#10b981" fillOpacity={0.15} />
+                              )}
                             </AreaChart>
                           );
                         })()}
@@ -1841,7 +1928,7 @@ function DashboardContent() {
                     <CardTitle className="text-base font-semibold">Usage by Agent</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px]">
+                    <div className="h-[300px]" style={{ cursor: zoomLeft ? "col-resize" : "crosshair" }}>
                       <ResponsiveContainer width="100%" height="100%">
                         {(() => {
                           const agentChartColors: Record<string, string> = {
@@ -1850,17 +1937,22 @@ function DashboardContent() {
                             dor: "#14b8a6",
                           };
                           const defaultColors = ["#6366f1", "#ec4899", "#f59e0b", "#84cc16", "#06b6d4"];
-                          const dates = analyticsData.buckets.map((b) => b.date);
+                          const dates = zoomedBuckets.map((b) => b.date);
                           const merged = dates.map((date) => {
                             const row: Record<string, string | number> = { date };
-                            for (const agent of analyticsData.byAgent) {
+                            for (const agent of zoomedByAgent) {
                               const bucket = agent.buckets.find((b) => b.date === date);
                               row[agent.agentId] = bucket?.costUsd ?? 0;
                             }
                             return row;
                           });
                           return (
-                            <AreaChart data={merged}>
+                            <AreaChart
+                              data={merged}
+                              onMouseDown={handleZoomMouseDown}
+                              onMouseMove={handleZoomMouseMove}
+                              onMouseUp={handleZoomMouseUp}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                               <XAxis dataKey="date" stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(d) => formatChartDate(String(d), analyticsGroupBy)} />
                               <YAxis stroke="#52525b" tick={{ fill: "#71717a", fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(v < 10 ? 2 : 0)}`} />
@@ -1910,6 +2002,9 @@ function DashboardContent() {
                                   <Area key={agent.agentId} type="monotone" dataKey={agent.agentId} stroke={hidden ? "transparent" : color} fill={hidden ? "transparent" : color} fillOpacity={hidden ? 0 : 0.15} strokeWidth={2} />
                                 );
                               })}
+                              {zoomLeft && zoomRight && (
+                                <ReferenceArea x1={zoomLeft} x2={zoomRight} strokeOpacity={0.3} fill="#10b981" fillOpacity={0.15} />
+                              )}
                             </AreaChart>
                           );
                         })()}

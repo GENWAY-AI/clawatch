@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, SpendData } from "@/lib/types";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 // --- Config ---
 const statusConfig: Record<AgentStatus, { color: string; dot: string; label: string; tooltip: string }> = {
-  running: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Running", tooltip: "Agent is actively processing tasks." },
+  running: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Running", tooltip: "Running means this agent has an active session with messages in the last few minutes. Unlike Idle (no active sessions) or Stopped (process not running), a Running agent is actively processing tasks. Status updates automatically based on heartbeat activity." },
   active: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Active", tooltip: "Agent is online and responsive." },
   idle: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Idle", tooltip: "Agent has no active sessions." },
   paused: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400", label: "Paused", tooltip: "Agent was manually paused." },
@@ -172,6 +173,9 @@ export function AgentsTab({
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className={`${sc.color} border text-xs`}>{sc.label}</Badge>
+                  {agent.status === "running" && (
+                    <InfoTooltip content={sc.tooltip} />
+                  )}
                   {agent.overLimit && agent.limit != null && (() => {
                     const spend = agent.limitType === "daily" ? (agent.todaySpend ?? 0) : (agent.mtdSpend ?? 0);
                     const over = spend - agent.limit;

@@ -599,4 +599,180 @@ program
     }
   });
 
+// --- Helper: detect how clawatch was installed ---
+function detectPackageManager(): { manager: 'npm' | 'yarn' | 'pnpm' | 'npx' | 'unknown'; global: boolean } {
+  const execPath = process.argv[1] || '';
+
+  // Check if running via npx (temporary install)
+  if (process.env.npm_execpath?.includes('npx') || execPath.includes('_npx')) {
+    return { manager: 'npx', global: true };
+  }
+
+  // Check global install paths
+  try {
+    // pnpm global
+    const pnpmGlobal = execSync('pnpm root -g 2>/dev/null', { encoding: 'utf-8' }).trim();
+    if (pnpmGlobal && execPath.includes(pnpmGlobal.replace('/node_modules', ''))) {
+      return { manager: 'pnpm', global: true };
+    }
+  } catch {}
+
+  try {
+    // yarn global
+    const yarnGlobal = execSync('yarn global dir 2>/dev/null', { encoding: 'utf-8' }).trim();
+    if (yarnGlobal && execPath.includes(yarnGlobal)) {
+      return { manager: 'yarn', global: true };
+    }
+  } catch {}
+
+  // Default: npm (most common)
+  // Check if in a global npm path
+  try {
+    const npmGlobal = execSync('npm root -g 2>/dev/null', { encoding: 'utf-8' }).trim();
+    if (npmGlobal && execPath.includes(npmGlobal.replace('/node_modules', ''))) {
+      return { manager: 'npm', global: true };
+    }
+  } catch {}
+
+  return { manager: 'npm', global: true }; // assume npm global as default
+}
+
+// --- Helper: fetch latest version from npm registry ---
+async function fetchLatestVersion(packageName: string): Promise<string | null> {
+  const https = require('https');
+  return new Promise((resolve) => {
+    const req = https.get(`https://registry.npmjs.org/${packageName}/latest`, { timeout: 10000 }, (res: any) => {
+      let data = '';
+      res.on('data', (chunk: string) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve(parsed.version || null);
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
+
+// --- Helper: compare semver versions (returns -1, 0, or 1) ---
+function compareSemver(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+  }
+  return 0;
+}
+
+program
+  .command('update')
+  .description('Check for updates and update ClaWatch to the latest version')
+  .option('--check', 'Only check for updates, don\'t install')
+  .action(async (opts) => {
+    const currentVersion = pkg.version;
+    const packageName = pkg.name || 'clawatch';
+
+    console.log(chalk.bold('\n🔍 ClaWatch Update\n'));
+    console.log(`  Current version: ${chalk.cyan(currentVersion)}`);
+
+    // Fetch latest version
+    console.log(chalk.gray('  Checking npm registry...'));
+    const latestVersion = await fetchLatestVersion(packageName);
+
+    if (!latestVersion) {
+      console.log(chalk.red('\n  ❌ Could not reach npm registry.'));
+      console.log(chalk.yellow('  Check your internet connection and try again.\n'));
+      process.exit(1);
+    }
+
+    console.log(`  Latest version:  ${chalk.cyan(latestVersion)}`);
+
+    const cmp = compareSemver(currentVersion, latestVersion);
+
+    if (cmp >= 0) {
+      console.log(chalk.green.bold('\n  ✅ Already on the latest version!\n'));
+      process.exit(0);
+    }
+
+    console.log(chalk.yellow(`\n  ⬆️  Update available: ${currentVersion} → ${latestVersion}`));
+
+    if (opts.check) {
+      console.log(chalk.gray(`\n  Run "clawatch update" to install.\n`));
+      process.exit(0);
+    }
+
+    // Detect package manager
+    const { manager, global: isGlobal } = detectPackageManager();
+
+    if (manager === 'npx') {
+      console.log(chalk.yellow('\n  You\'re running ClaWatch via npx (temporary install).'));
+      console.log(chalk.yellow('  npx will automatically use the latest version next time you run it.'));
+      console.log(chalk.gray('\n  Or install globally for faster startup:'));
+      console.log(chalk.white('    npm install -g clawatch\n'));
+      process.exit(0);
+    }
+
+    // Build update command
+    let updateCmd: string;
+    switch (manager) {
+      case 'pnpm':
+        updateCmd = `pnpm update -g ${packageName}`;
+        break;
+      case 'yarn':
+        updateCmd = `yarn global upgrade ${packageName}`;
+        break;
+      case 'npm':
+      default:
+        updateCmd = `npm update -g ${packageName}`;
+        break;
+    }
+
+    // Prompt user
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+    const answer = await new Promise<string>((resolve) => {
+      rl.question(chalk.white(`\n  Update now? [Y/n] `), (ans: string) => {
+        rl.close();
+        resolve(ans.trim().toLowerCase());
+      });
+    });
+
+    if (answer === 'n' || answer === 'no') {
+      console.log(chalk.gray('\n  Update skipped.\n'));
+      process.exit(0);
+    }
+
+    // Run update
+    console.log(chalk.blue(`\n  Running: ${updateCmd}\n`));
+
+    try {
+      execSync(updateCmd, { stdio: 'inherit' });
+      console.log(chalk.green.bold(`\n  ✅ Updated to ${latestVersion}!`));
+
+      // Verify update
+      try {
+        const newVersion = execSync(`${packageName} --version 2>/dev/null`, { encoding: 'utf-8' }).trim();
+        if (newVersion && newVersion !== currentVersion) {
+          console.log(chalk.green(`  Verified: now running v${newVersion}`));
+        }
+      } catch { /* verification is best-effort */ }
+
+      console.log(chalk.gray('  Restart ClaWatch to use the new version: clawatch stop && clawatch start -d\n'));
+    } catch (err: any) {
+      console.log(chalk.red(`\n  ❌ Update failed.`));
+      console.log(chalk.yellow(`  Try running manually: ${updateCmd}`));
+      if (process.platform !== 'win32') {
+        console.log(chalk.gray(`  If permission denied, try: sudo ${updateCmd}`));
+      }
+      console.log('');
+      process.exit(1);
+    }
+  });
+
 program.parse();

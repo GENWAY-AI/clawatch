@@ -47,6 +47,12 @@ export function discoverProfiles(): Profile[] {
 
 // ---------- Types ----------
 
+export interface CostPoint {
+  timestamp: string;
+  costUsd: number;
+  tokenCount: number;
+}
+
 export interface SessionSummary {
   id: string;
   agentId: string;
@@ -61,6 +67,8 @@ export interface SessionSummary {
   lastActivityAt: string;
   duration: number;
   costByModel: Array<{ model: string; costUsd: number; tokenCount: number }>;
+  /** Per-message cost points for accurate time-based aggregation (analytics only) */
+  costPoints?: CostPoint[];
 }
 
 export interface SessionDetailMessage {
@@ -247,7 +255,8 @@ async function parseSessionFile(
   filePath: string,
   agentId: string,
   collectMessages: boolean,
-  profileId: string = "default"
+  profileId: string = "default",
+  collectCostPoints: boolean = false
 ): Promise<{ summary: SessionSummary; detail?: Omit<SessionDetail, keyof SessionSummary> } | null> {
   // Handle both .jsonl and .jsonl.reset.TIMESTAMP files
   const basename = path.basename(filePath);
@@ -266,6 +275,7 @@ async function parseSessionFile(
   const costByModel = new Map<string, { costUsd: number; tokenCount: number }>();
   const tokenBreakdown = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const messages: SessionDetailMessage[] = [];
+  const costPoints: CostPoint[] = [];
 
   const stream = fs.createReadStream(filePath, { encoding: "utf-8" });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
@@ -317,6 +327,17 @@ async function parseSessionFile(
           tokenBreakdown.output += u.output || 0;
           tokenBreakdown.cacheRead += u.cacheRead || 0;
           tokenBreakdown.cacheWrite += u.cacheWrite || 0;
+        }
+
+        // Collect cost points for analytics time bucketing
+        // Include points with non-zero cost OR non-zero tokens so cached/
+        // discounted usage still counts toward token totals and session buckets.
+        if (collectCostPoints && (msgCost > 0 || msgTokens > 0) && ts) {
+          costPoints.push({
+            timestamp: ts,
+            costUsd: msgCost,
+            tokenCount: msgTokens,
+          });
         }
       }
 
@@ -391,6 +412,7 @@ async function parseSessionFile(
     lastActivityAt: lastTimestamp,
     duration: new Date(lastTimestamp).getTime() - new Date(firstTimestamp).getTime(),
     costByModel: costByModelArray,
+    ...(collectCostPoints && costPoints.length > 0 ? { costPoints } : {}),
   };
 
   if (!collectMessages) return { summary };
@@ -406,7 +428,7 @@ async function parseSessionFile(
 
 // ---------- Public API ----------
 
-async function listSessionsForDir(dir: string, profileId: string): Promise<SessionSummary[]> {
+async function listSessionsForDir(dir: string, profileId: string, collectCostPoints: boolean = false): Promise<SessionSummary[]> {
   const agentsDir = path.join(dir, "agents");
   if (!fs.existsSync(agentsDir)) return [];
 
@@ -422,7 +444,7 @@ async function listSessionsForDir(dir: string, profileId: string): Promise<Sessi
     const files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith(".jsonl") || f.includes(".jsonl.reset."));
 
     const results = await Promise.all(
-      files.map((f) => parseSessionFile(path.join(sessionsDir, f), agentName, false, profileId))
+      files.map((f) => parseSessionFile(path.join(sessionsDir, f), agentName, false, profileId, collectCostPoints))
     );
 
     for (const result of results) {
@@ -478,6 +500,48 @@ export async function listSessions(profile?: string): Promise<SessionSummary[]> 
   }
 
   // Sort by lastActivityAt DESC
+  allSessions.sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime());
+
+  sessionCache.set(cacheKey, { sessions: allSessions, timestamp: now });
+
+  return allSessions;
+}
+
+/** List sessions with per-message cost points for accurate time-based analytics aggregation */
+export async function listSessionsForAnalytics(profile?: string): Promise<SessionSummary[]> {
+  // Analytics queries are less frequent and need fresh data with cost points
+  // Use a separate cache key to avoid mixing with regular session lists
+  const cacheKey = `analytics:${profile || "__all__"}`;
+  const now = Date.now();
+  const cached = sessionCache.get(cacheKey);
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return cached.sessions;
+  }
+
+  let allSessions: SessionSummary[] = [];
+
+  if (profile) {
+    const profiles = discoverProfiles();
+    const p = profiles.find((pr) => pr.id === profile);
+    if (p) {
+      allSessions = await listSessionsForDir(p.dir, p.id, true); // collectCostPoints = true
+    } else {
+      const dir = resolveOpenclawDir();
+      allSessions = await listSessionsForDir(dir, "default", true);
+    }
+  } else {
+    const profiles = discoverProfiles();
+    if (profiles.length === 0) {
+      const dir = resolveOpenclawDir();
+      allSessions = await listSessionsForDir(dir, "default", true);
+    } else {
+      for (const p of profiles) {
+        const sessions = await listSessionsForDir(p.dir, p.id, true);
+        allSessions.push(...sessions);
+      }
+    }
+  }
+
   allSessions.sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime());
 
   sessionCache.set(cacheKey, { sessions: allSessions, timestamp: now });

@@ -3,7 +3,7 @@ import { v4 as uuid } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
 import db from "./db";
-import { listSessions, getSessionDetail, discoverProfiles, SessionSummary } from "./sessions";
+import { listSessions, listSessionsForAnalytics, getSessionDetail, discoverProfiles, SessionSummary } from "./sessions";
 import { syncAllData, getLastSyncTime } from "./sync";
 import {
   createProject,
@@ -795,7 +795,7 @@ router.get("/analytics", async (req: Request, res: Response) => {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
 
-    let sessions = await listSessions(profile);
+    let sessions = await listSessionsForAnalytics(profile);
 
     // For hourly view, default to last 3 days if no from specified
     let effectiveFrom = from;
@@ -805,9 +805,19 @@ router.get("/analytics", async (req: Request, res: Response) => {
       effectiveFrom = threeDaysAgo.toISOString();
     }
 
-    // Filter by date range using startedAt
-    if (effectiveFrom) sessions = sessions.filter((s) => s.startedAt >= effectiveFrom!);
-    if (to) sessions = sessions.filter((s) => s.startedAt <= to);
+    // Filter by date range using lastActivityAt (or startedAt as fallback)
+    // so long-running sessions with activity inside the range are included.
+    // Compare as epoch ms to avoid string-ordering bugs across ISO formats.
+    const fromEpoch = effectiveFrom ? new Date(effectiveFrom).getTime() : null;
+    const toEpoch = to ? new Date(to).getTime() : null;
+    if (fromEpoch) sessions = sessions.filter((s) => {
+      const ts = new Date(s.lastActivityAt || s.startedAt).getTime();
+      return ts >= fromEpoch;
+    });
+    if (toEpoch) sessions = sessions.filter((s) => {
+      const ts = new Date(s.startedAt).getTime();
+      return ts <= toEpoch;
+    });
 
     // Get project tags for all sessions
     const sessionIds = sessions.map((s) => s.id);
@@ -858,33 +868,60 @@ router.get("/analytics", async (req: Request, res: Response) => {
     const agentMap = new Map<string, Map<string, Bucket>>();
     const projectMap = new Map<string, { name: string; buckets: Map<string, Bucket> }>();
 
+    // Track which sessions have been counted (for sessionCount)
+    const sessionCountedInBucket = new Map<string, Set<string>>(); // bucket key -> set of session IDs
+
     for (const s of sessions) {
-      const key = getBucketKey(s.startedAt);
+      // Use cost points for accurate time bucketing when available
+      const points = s.costPoints && s.costPoints.length > 0
+        ? s.costPoints
+        : [{ timestamp: s.startedAt, costUsd: s.costUsd, tokenCount: s.tokenCount }];
 
-      // Total
-      const tb = totalMap.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
-      tb.costUsd += s.costUsd;
-      tb.tokenCount += s.tokenCount;
-      tb.sessionCount += 1;
-      totalMap.set(key, tb);
+      for (const point of points) {
+        const key = getBucketKey(point.timestamp);
 
-      // By agent
-      if (!agentMap.has(s.agentId)) agentMap.set(s.agentId, new Map());
-      const ab = agentMap.get(s.agentId)!.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
-      ab.costUsd += s.costUsd;
-      ab.tokenCount += s.tokenCount;
-      ab.sessionCount += 1;
-      agentMap.get(s.agentId)!.set(key, ab);
+        // Total
+        const tb = totalMap.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+        tb.costUsd += point.costUsd;
+        tb.tokenCount += point.tokenCount;
+        // Count each session only once per bucket
+        if (!sessionCountedInBucket.has(key)) sessionCountedInBucket.set(key, new Set());
+        if (!sessionCountedInBucket.get(key)!.has(s.id)) {
+          tb.sessionCount += 1;
+          sessionCountedInBucket.get(key)!.add(s.id);
+        }
+        totalMap.set(key, tb);
 
-      // By project (session can belong to multiple projects)
-      const projects = projectTags.get(s.id) || [];
-      for (const p of projects) {
-        if (!projectMap.has(p.id)) projectMap.set(p.id, { name: p.name, buckets: new Map() });
-        const pb = projectMap.get(p.id)!.buckets.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
-        pb.costUsd += s.costUsd;
-        pb.tokenCount += s.tokenCount;
-        pb.sessionCount += 1;
-        projectMap.get(p.id)!.buckets.set(key, pb);
+        // By agent
+        if (!agentMap.has(s.agentId)) agentMap.set(s.agentId, new Map());
+        const ab = agentMap.get(s.agentId)!.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+        ab.costUsd += point.costUsd;
+        ab.tokenCount += point.tokenCount;
+        // Count session once per agent per bucket
+        const agentBucketKey = `${s.agentId}:${key}`;
+        if (!sessionCountedInBucket.has(agentBucketKey)) sessionCountedInBucket.set(agentBucketKey, new Set());
+        if (!sessionCountedInBucket.get(agentBucketKey)!.has(s.id)) {
+          ab.sessionCount += 1;
+          sessionCountedInBucket.get(agentBucketKey)!.add(s.id);
+        }
+        agentMap.get(s.agentId)!.set(key, ab);
+
+        // By project (session can belong to multiple projects)
+        const projects = projectTags.get(s.id) || [];
+        for (const p of projects) {
+          if (!projectMap.has(p.id)) projectMap.set(p.id, { name: p.name, buckets: new Map() });
+          const pb = projectMap.get(p.id)!.buckets.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+          pb.costUsd += point.costUsd;
+          pb.tokenCount += point.tokenCount;
+          // Count session once per project per bucket
+          const projectBucketKey = `${p.id}:${key}`;
+          if (!sessionCountedInBucket.has(projectBucketKey)) sessionCountedInBucket.set(projectBucketKey, new Set());
+          if (!sessionCountedInBucket.get(projectBucketKey)!.has(s.id)) {
+            pb.sessionCount += 1;
+            sessionCountedInBucket.get(projectBucketKey)!.add(s.id);
+          }
+          projectMap.get(p.id)!.buckets.set(key, pb);
+        }
       }
     }
 

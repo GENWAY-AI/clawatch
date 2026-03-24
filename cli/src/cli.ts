@@ -608,63 +608,95 @@ function detectPackageManager(): { manager: 'npm' | 'yarn' | 'pnpm' | 'npx' | 'u
     return { manager: 'npx', global: true };
   }
 
-  // Check global install paths
+  // Helper: check if execPath is under a given global root
+  const isUnderGlobal = (globalRoot: string) =>
+    globalRoot && execPath.includes(globalRoot.replace(/\/node_modules\/?$/, ''));
+
+  // Check global install paths for each manager
   try {
-    // pnpm global
     const pnpmGlobal = execSync('pnpm root -g 2>/dev/null', { encoding: 'utf-8' }).trim();
-    if (pnpmGlobal && execPath.includes(pnpmGlobal.replace('/node_modules', ''))) {
-      return { manager: 'pnpm', global: true };
-    }
+    if (isUnderGlobal(pnpmGlobal)) return { manager: 'pnpm', global: true };
   } catch {}
 
   try {
-    // yarn global
     const yarnGlobal = execSync('yarn global dir 2>/dev/null', { encoding: 'utf-8' }).trim();
-    if (yarnGlobal && execPath.includes(yarnGlobal)) {
-      return { manager: 'yarn', global: true };
-    }
+    if (yarnGlobal && execPath.includes(yarnGlobal)) return { manager: 'yarn', global: true };
   } catch {}
 
-  // Default: npm (most common)
-  // Check if in a global npm path
   try {
     const npmGlobal = execSync('npm root -g 2>/dev/null', { encoding: 'utf-8' }).trim();
-    if (npmGlobal && execPath.includes(npmGlobal.replace('/node_modules', ''))) {
-      return { manager: 'npm', global: true };
-    }
+    if (isUnderGlobal(npmGlobal)) return { manager: 'npm', global: true };
   } catch {}
 
-  return { manager: 'npm', global: true }; // assume npm global as default
+  // If we're inside a project-local node_modules/.bin path, this is a local install
+  if (execPath.includes('node_modules/.bin') || execPath.includes('node_modules\\.bin')) {
+    // Detect which lock file exists to infer the local package manager
+    const fs = require('fs');
+    const path = require('path');
+    let dir = path.dirname(execPath);
+    // Walk up to find lock file (max 5 levels from node_modules/.bin)
+    for (let i = 0; i < 5; i++) {
+      if (fs.existsSync(path.join(dir, 'pnpm-lock.yaml'))) return { manager: 'pnpm', global: false };
+      if (fs.existsSync(path.join(dir, 'yarn.lock'))) return { manager: 'yarn', global: false };
+      if (fs.existsSync(path.join(dir, 'package-lock.json'))) return { manager: 'npm', global: false };
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return { manager: 'npm', global: false };
+  }
+
+  // Fallback: assume npm global (most common install method)
+  return { manager: 'npm', global: true };
 }
 
 // --- Helper: fetch latest version from npm registry ---
-async function fetchLatestVersion(packageName: string): Promise<string | null> {
+async function fetchLatestVersion(packageName: string): Promise<{ version: string | null; error?: string }> {
   const https = require('https');
+  const encodedName = encodeURIComponent(packageName).replace('%40', '@'); // keep @ for scoped packages
+  const url = `https://registry.npmjs.org/${encodedName}/latest`;
   return new Promise((resolve) => {
-    const req = https.get(`https://registry.npmjs.org/${packageName}/latest`, { timeout: 10000 }, (res: any) => {
+    const req = https.get(url, { timeout: 10000 }, (res: any) => {
       let data = '';
       res.on('data', (chunk: string) => { data += chunk; });
       res.on('end', () => {
+        if (res.statusCode === 404) {
+          resolve({ version: null, error: 'Package not found on npm registry.' });
+          return;
+        }
+        if (res.statusCode === 429) {
+          resolve({ version: null, error: 'npm registry rate limit exceeded. Try again later.' });
+          return;
+        }
+        if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+          resolve({ version: null, error: `npm registry returned HTTP ${res.statusCode}.` });
+          return;
+        }
         try {
           const parsed = JSON.parse(data);
-          resolve(parsed.version || null);
+          resolve({ version: parsed.version || null });
         } catch {
-          resolve(null);
+          resolve({ version: null, error: 'Invalid response from npm registry.' });
         }
       });
     });
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.on('error', () => resolve({ version: null, error: 'Could not reach npm registry. Check your internet connection.' }));
+    req.on('timeout', () => { req.destroy(); resolve({ version: null, error: 'npm registry request timed out.' }); });
   });
 }
 
 // --- Helper: compare semver versions (returns -1, 0, or 1) ---
+// Strips pre-release/build metadata before comparing numeric segments.
 function compareSemver(a: string, b: string): number {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
+  // Strip pre-release (-beta.1) and build metadata (+sha.abc)
+  const clean = (v: string) => v.replace(/[-+].*$/, '');
+  const pa = clean(a).split('.').map(Number);
+  const pb = clean(b).split('.').map(Number);
   for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
-    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    const sa = Number.isFinite(pa[i]) ? pa[i] : 0;
+    const sb = Number.isFinite(pb[i]) ? pb[i] : 0;
+    if (sa < sb) return -1;
+    if (sa > sb) return 1;
   }
   return 0;
 }
@@ -682,11 +714,11 @@ program
 
     // Fetch latest version
     console.log(chalk.gray('  Checking npm registry...'));
-    const latestVersion = await fetchLatestVersion(packageName);
+    const { version: latestVersion, error: fetchError } = await fetchLatestVersion(packageName);
 
     if (!latestVersion) {
-      console.log(chalk.red('\n  ❌ Could not reach npm registry.'));
-      console.log(chalk.yellow('  Check your internet connection and try again.\n'));
+      console.log(chalk.red(`\n  ❌ ${fetchError || 'Unknown error checking for updates.'}`));
+      console.log('');
       process.exit(1);
     }
 
@@ -703,7 +735,8 @@ program
 
     if (opts.check) {
       console.log(chalk.gray(`\n  Run "clawatch update" to install.\n`));
-      process.exit(0);
+      // Exit with code 1 when an update is available so CI/scripts can gate on it
+      process.exit(1);
     }
 
     // Detect package manager
@@ -717,22 +750,45 @@ program
       process.exit(0);
     }
 
-    // Build update command
+    // Build update command based on manager and global/local context
     let updateCmd: string;
-    switch (manager) {
-      case 'pnpm':
-        updateCmd = `pnpm update -g ${packageName}`;
-        break;
-      case 'yarn':
-        updateCmd = `yarn global upgrade ${packageName}`;
-        break;
-      case 'npm':
-      default:
-        updateCmd = `npm update -g ${packageName}`;
-        break;
+    if (isGlobal) {
+      switch (manager) {
+        case 'pnpm':
+          updateCmd = `pnpm update -g ${packageName}`;
+          break;
+        case 'yarn':
+          updateCmd = `yarn global upgrade ${packageName}`;
+          break;
+        case 'npm':
+        default:
+          updateCmd = `npm update -g ${packageName}`;
+          break;
+      }
+    } else {
+      // Local install: update within the project
+      switch (manager) {
+        case 'pnpm':
+          updateCmd = `pnpm update ${packageName}`;
+          break;
+        case 'yarn':
+          updateCmd = `yarn upgrade ${packageName}`;
+          break;
+        case 'npm':
+        default:
+          updateCmd = `npm update ${packageName}`;
+          break;
+      }
     }
 
-    // Prompt user
+    // Prompt user (only in interactive TTY environments)
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      console.log(chalk.yellow('\n  Non-interactive environment detected.'));
+      console.log(chalk.gray(`  Use --check to check for updates without prompting.`));
+      console.log(chalk.gray(`  Or run manually: ${updateCmd}\n`));
+      process.exit(1);
+    }
+
     const readline = require('readline');
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 

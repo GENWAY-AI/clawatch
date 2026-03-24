@@ -330,7 +330,9 @@ async function parseSessionFile(
         }
 
         // Collect cost points for analytics time bucketing
-        if (collectCostPoints && msgCost > 0 && ts) {
+        // Include points with non-zero cost OR non-zero tokens so cached/
+        // discounted usage still counts toward token totals and session buckets.
+        if (collectCostPoints && (msgCost > 0 || msgTokens > 0) && ts) {
           costPoints.push({
             timestamp: ts,
             costUsd: msgCost,

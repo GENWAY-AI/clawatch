@@ -805,9 +805,19 @@ router.get("/analytics", async (req: Request, res: Response) => {
       effectiveFrom = threeDaysAgo.toISOString();
     }
 
-    // Filter by date range using startedAt
-    if (effectiveFrom) sessions = sessions.filter((s) => s.startedAt >= effectiveFrom!);
-    if (to) sessions = sessions.filter((s) => s.startedAt <= to);
+    // Filter by date range using lastActivityAt (or startedAt as fallback)
+    // so long-running sessions with activity inside the range are included.
+    // Compare as epoch ms to avoid string-ordering bugs across ISO formats.
+    const fromEpoch = effectiveFrom ? new Date(effectiveFrom).getTime() : null;
+    const toEpoch = to ? new Date(to).getTime() : null;
+    if (fromEpoch) sessions = sessions.filter((s) => {
+      const ts = new Date(s.lastActivityAt || s.startedAt).getTime();
+      return ts >= fromEpoch;
+    });
+    if (toEpoch) sessions = sessions.filter((s) => {
+      const ts = new Date(s.startedAt).getTime();
+      return ts <= toEpoch;
+    });
 
     // Get project tags for all sessions
     const sessionIds = sessions.map((s) => s.id);

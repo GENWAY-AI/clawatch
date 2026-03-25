@@ -119,8 +119,32 @@ function mapComplexityToModel(
  * Generate recommendation for a session (requires full detail)
  */
 export function recommendModelForSession(session: SessionDetail): ModelRecommendation {
+  // Edge case: no messages or no model info
+  if (!session.model || session.messageCount === 0) {
+    return {
+      currentModel: session.model || "unknown",
+      recommendedModel: session.model || "unknown",
+      complexity: "simple",
+      confidence: 0,
+      reasons: ["Insufficient data to analyze this session"],
+      potentialSavings: { costUsd: 0, percentage: 0 },
+    };
+  }
+
   const classification = classifySession(session);
   const recommendation = mapComplexityToModel(classification.complexity, session.model);
+
+  // Edge case: zero cost session — no savings to compute
+  if (session.costUsd === 0 || session.tokenCount === 0) {
+    return {
+      currentModel: session.model,
+      recommendedModel: recommendation.model,
+      complexity: classification.complexity,
+      confidence: classification.confidence,
+      reasons: [...classification.reasons, recommendation.reason],
+      potentialSavings: { costUsd: 0, percentage: 0 },
+    };
+  }
 
   // Calculate potential savings
   const currentCost = session.costUsd;
@@ -135,8 +159,8 @@ export function recommendModelForSession(session: SessionDetail): ModelRecommend
     confidence: classification.confidence,
     reasons: [...classification.reasons, recommendation.reason],
     potentialSavings: {
-      costUsd: savings,
-      percentage: savingsPercentage,
+      costUsd: Math.round(savings * 10000) / 10000, // Round to 4 decimal places
+      percentage: Math.round(savingsPercentage * 10) / 10,
     },
   };
 }

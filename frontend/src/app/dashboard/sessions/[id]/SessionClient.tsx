@@ -190,7 +190,7 @@ export default function SessionClient() {
           </button>
 
           <div className="space-y-3">
-            <h1 className="text-2xl font-bold">{session.title}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold break-words">{session.title}</h1>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className={`border ${agentColors[session.agentId] || "text-zinc-400"}`}>
                 {session.agentId}
@@ -203,7 +203,7 @@ export default function SessionClient() {
                 {sc.label}
               </Badge>
             </div>
-            <div className="flex items-center gap-6 text-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-sm">
               <div>
                 <span className="text-3xl font-bold">${session.costUsd.toFixed(2)}</span>
               </div>
@@ -212,7 +212,8 @@ export default function SessionClient() {
                 <div>{session.messageCount} messages</div>
               </div>
               <div className="text-muted-foreground text-xs">
-                <div>Started: {formatRelativeTime(session.startedAt)} ({formatAbsoluteTime(session.startedAt)})</div>
+                <div>Started: {formatRelativeTime(session.startedAt)}</div>
+                <div className="hidden sm:block text-[10px]">({formatAbsoluteTime(session.startedAt)})</div>
                 <div>Last activity: {formatRelativeTime(session.lastActivityAt)}</div>
               </div>
             </div>
@@ -309,14 +310,14 @@ function MessageBubble({
 
   if (msg.role === "user") {
     return (
-      <div className="relative pl-12 flex justify-end">
-        <div className="absolute left-3.5 top-3 size-3 rounded-full bg-blue-500 ring-4 ring-background z-10" />
-        <div className={`rounded-lg border border-blue-500/20 bg-blue-500/10 p-4 max-w-[80%] ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
-          <div className="flex items-center gap-2 mb-2">
+      <div className="relative pl-8 sm:pl-12 flex justify-end">
+        <div className="absolute left-1.5 sm:left-3.5 top-3 size-3 rounded-full bg-blue-500 ring-4 ring-background z-10" />
+        <div className={`rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 sm:p-4 max-w-full sm:max-w-[80%] ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="text-xs font-medium text-blue-400">User</span>
             <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
           </div>
-          <ExpandableText text={msg.content} className="text-sm whitespace-pre-wrap" />
+          <ExpandableText text={msg.content} className="text-sm whitespace-pre-wrap break-words" />
         </div>
       </div>
     );
@@ -324,11 +325,11 @@ function MessageBubble({
 
   if (msg.role === "assistant") {
     return (
-      <div className="relative pl-12">
-        <div className="absolute left-3.5 top-3 size-3 rounded-full bg-zinc-500 ring-4 ring-background z-10" />
-        <div className={`rounded-lg border border-border/50 bg-zinc-800/50 p-4 max-w-[80%] ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
+      <div className="relative pl-8 sm:pl-12">
+        <div className="absolute left-1.5 sm:left-3.5 top-3 size-3 rounded-full bg-zinc-500 ring-4 ring-background z-10" />
+        <div className={`rounded-lg border border-border/50 bg-zinc-800/50 p-3 sm:p-4 max-w-full sm:max-w-[80%] ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 mb-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-medium text-zinc-400">Assistant</span>
               {msg.model && <span className="text-[10px] font-mono text-muted-foreground">{msg.model}</span>}
               <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
@@ -344,7 +345,7 @@ function MessageBubble({
               </div>
             )}
           </div>
-          <ExpandableText text={msg.content} className="text-sm whitespace-pre-wrap" />
+          <ExpandableText text={msg.content} className="text-sm whitespace-pre-wrap break-words" />
         </div>
       </div>
     );
@@ -352,11 +353,11 @@ function MessageBubble({
 
   if (msg.role === "tool") {
     return (
-      <div className="relative pl-12">
-        <div className="absolute left-3.5 top-3 size-3 rounded-full bg-amber-500 ring-4 ring-background z-10" />
-        <div className={`rounded-lg border border-border/50 bg-zinc-900 p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
+      <div className="relative pl-8 sm:pl-12">
+        <div className="absolute left-1.5 sm:left-3.5 top-3 size-3 rounded-full bg-amber-500 ring-4 ring-background z-10" />
+        <div className={`rounded-lg border border-border/50 bg-zinc-900 p-3 sm:p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-amber-400">Tool</span>
               {msg.toolName && (
                 <Badge variant="outline" className="text-[10px] font-mono bg-amber-500/10 text-amber-400 border-amber-500/20">
@@ -367,14 +368,14 @@ function MessageBubble({
             </div>
             <button
               onClick={onToggle}
-              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 min-h-[28px] px-2"
             >
               {collapsed ? "Show" : "Hide"}
             </button>
           </div>
           {msg.toolInput && (
             <div className="bg-black/30 rounded px-2 py-1 mb-2 overflow-x-auto">
-              <ExpandableText text={msg.toolInput} className="text-[11px] font-mono text-muted-foreground" preformatted />
+              <ExpandableText text={msg.toolInput} className="text-[11px] font-mono text-muted-foreground break-all" preformatted />
             </div>
           )}
           {!collapsed && (
@@ -387,14 +388,14 @@ function MessageBubble({
 
   // system
   return (
-    <div className="relative pl-12">
-      <div className="absolute left-3.5 top-3 size-3 rounded-full bg-zinc-700 ring-4 ring-background z-10" />
-      <div className="rounded-lg px-4 py-2">
-        <div className="flex items-center gap-2">
+    <div className="relative pl-8 sm:pl-12">
+      <div className="absolute left-1.5 sm:left-3.5 top-3 size-3 rounded-full bg-zinc-700 ring-4 ring-background z-10" />
+      <div className="rounded-lg px-3 sm:px-4 py-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[11px] text-muted-foreground">System</span>
           <span className="text-[11px] text-muted-foreground">{formatAbsoluteTime(msg.timestamp)}</span>
         </div>
-        <ExpandableText text={msg.content} className="text-xs text-muted-foreground mt-1" />
+        <ExpandableText text={msg.content} className="text-xs text-muted-foreground mt-1 break-words" />
       </div>
     </div>
   );

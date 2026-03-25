@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, Project, Profile, AnalyticsData, SpendData, CostLimits } from "@/lib/types";
-import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, getProfiles, getVersion, getAnalytics, getSpend, setCostLimits, isUsingMockData } from "@/lib/api";
+import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, Project, Profile, AnalyticsData, SpendData, CostLimits, BulkRecommendationSummary } from "@/lib/types";
+import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, getProfiles, getVersion, getAnalytics, getSpend, setCostLimits, isUsingMockData, getRecommendationSummary } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
 import { AgentsTab } from "./components/AgentsTab";
 import { SessionsTab } from "./components/SessionsTab";
 import { AnalyticsTab } from "./components/AnalyticsTab";
 import { ProjectsTab } from "./components/ProjectsTab";
+import { RecommendationsTab } from "./components/RecommendationsTab";
 
 // --- Helpers ---
 function parseChartDate(d: string): Date {
@@ -28,7 +29,7 @@ function formatTokens(n: number): string {
 }
 
 // --- Types ---
-type Tab = "agents" | "sessions" | "projects" | "analytics";
+type Tab = "agents" | "sessions" | "projects" | "analytics" | "recommendations";
 type SessionFilter = "all" | "active" | "idle" | "completed";
 type SessionSort = "recent" | "cost" | "tokens";
 type AlertFilter = "all" | "critical" | "warning" | "info";
@@ -122,7 +123,7 @@ function DashboardContent() {
 
   // --- Tab state ---
   const tabParam = searchParams.get("tab") as Tab | null;
-  const [tab, setTabRaw] = useState<Tab>(tabParam && ["agents", "sessions", "projects", "analytics"].includes(tabParam) ? tabParam : "agents");
+  const [tab, setTabRaw] = useState<Tab>(tabParam && ["agents", "sessions", "projects", "analytics", "recommendations"].includes(tabParam) ? tabParam : "agents");
   function setTab(t: Tab) {
     setTabRaw(t);
     const params = new URLSearchParams(searchParams.toString());
@@ -158,6 +159,8 @@ function DashboardContent() {
   const [showingDemoData, setShowingDemoData] = useState(false);
   const [showCostSettings, setShowCostSettings] = useState(false);
   const [showIdleAgents, setShowIdleAgents] = useState(false);
+  const [recommendationsSummary, setRecommendationsSummary] = useState<BulkRecommendationSummary | null>(null);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
 
   // --- Session/Alert filter state ---
   const sessionFilterParam = searchParams.get("sessionFilter") as SessionFilter | null;
@@ -361,6 +364,17 @@ function DashboardContent() {
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, selectedProfile, timeWindow, customFrom, customTo]);
+
+  useEffect(() => {
+    if (tab !== "recommendations") return;
+    let cancelled = false;
+    setRecommendationsLoading(true);
+    getRecommendationSummary(selectedProfile, 20)
+      .then((data) => { if (!cancelled) setRecommendationsSummary(data); })
+      .catch(() => { if (!cancelled) setRecommendationsSummary(null); })
+      .finally(() => { if (!cancelled) setRecommendationsLoading(false); });
+    return () => { cancelled = true; };
+  }, [tab, selectedProfile]);
 
   useEffect(() => {
     if (!zoomRange || !analyticsData) { setZoomedAnalytics(null); prevZoomRange.current = null; return; }
@@ -601,16 +615,17 @@ function DashboardContent() {
         )}
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-border/50">
+        <div className="flex items-center gap-1 border-b border-border/50 overflow-x-auto">
           {([
             { key: "agents" as Tab, label: "Active Agents", count: agents.length },
             { key: "sessions" as Tab, label: "Sessions", count: sessionsTotal || sessions.length },
             { key: "projects" as Tab, label: "Projects", count: projects.length },
             { key: "analytics" as Tab, label: "Analytics", count: null },
-          ]).map(({ key, label, count }) => (
-            <button key={key} onClick={() => setTab(key)} className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${tab === key ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+            { key: "recommendations" as Tab, label: "Recommendations", count: recommendationsSummary?.recommendations.length ?? null, badge: recommendationsSummary && recommendationsSummary.potentialTotalSavings > 0 },
+          ]).map(({ key, label, count, badge }) => (
+            <button key={key} onClick={() => setTab(key)} className={`px-4 py-2.5 text-sm font-medium transition-colors relative whitespace-nowrap ${tab === key ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
               {label}
-              {count !== null && <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">{count}</Badge>}
+              {count !== null && <Badge variant="outline" className={`ml-2 text-[10px] px-1.5 py-0 ${badge ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : ""}`}>{count}</Badge>}
               {tab === key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />}
             </button>
           ))}
@@ -651,6 +666,12 @@ function DashboardContent() {
         )}
         {tab === "projects" && (
           <ProjectsTab projects={projects} setProjects={setProjects} />
+        )}
+        {tab === "recommendations" && (
+          <RecommendationsTab
+            summary={recommendationsSummary}
+            loading={recommendationsLoading}
+          />
         )}
       </div>
     </div>

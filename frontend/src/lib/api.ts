@@ -467,3 +467,19 @@ export async function setCostLimits(limits: CostLimits): Promise<CostLimits> {
     body: JSON.stringify(limits),
   });
 }
+
+// Model Recommendations (#51)
+import type { BulkRecommendationSummary, SessionRecommendation } from "./types";
+
+export async function getRecommendationSummary(profile?: string, limit?: number): Promise<BulkRecommendationSummary> {
+  const params = new URLSearchParams();
+  if (profile) params.set("profile", profile);
+  if (limit) params.set("limit", String(limit));
+  const qs = params.toString();
+  return await fetchJson<BulkRecommendationSummary>(`/api/recommendations/summary${qs ? `?${qs}` : ""}`);
+}
+
+export async function getSessionRecommendation(sessionId: string, profile?: string): Promise<SessionRecommendation> {
+  const qs = profile ? `?profile=${profile}` : "";
+  return await fetchJson<SessionRecommendation>(`/api/recommendations/${sessionId}${qs}`);
+}

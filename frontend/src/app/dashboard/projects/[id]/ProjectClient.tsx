@@ -154,28 +154,28 @@ export default function ProjectClient() {
             <span>&larr;</span> Back to Dashboard
           </button>
 
-          <h1 className="text-2xl font-bold mb-2">{project.name}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold mb-2 break-words">{project.name}</h1>
           <p className="text-sm text-muted-foreground mb-4">{project.description}</p>
 
           {/* Stats row */}
-          <div className="flex items-center gap-6 flex-wrap">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
             <div>
               <span className="text-3xl font-bold">${project.stats.totalCostUsd.toFixed(2)}</span>
               <span className="text-sm text-muted-foreground ml-2">total cost</span>
             </div>
-            <div className="h-8 w-px bg-border/50" />
+            <div className="hidden sm:block h-8 w-px bg-border/50" />
             <div className="text-sm text-muted-foreground">
               <div className="font-medium text-foreground">{project.stats.sessionCount} sessions</div>
             </div>
-            <div className="h-8 w-px bg-border/50" />
+            <div className="hidden sm:block h-8 w-px bg-border/50" />
             <div className="text-sm text-muted-foreground">
               <div className="font-medium text-foreground">{project.stats.totalMessages} messages</div>
             </div>
-            <div className="h-8 w-px bg-border/50" />
+            <div className="hidden sm:block h-8 w-px bg-border/50" />
             <div className="text-sm text-muted-foreground">
               <div className="font-medium text-foreground">{formatTokens(project.stats.totalTokens)} tokens</div>
             </div>
-            <div className="h-8 w-px bg-border/50" />
+            <div className="hidden sm:block h-8 w-px bg-border/50" />
             <div className="text-xs text-muted-foreground">
               <div>{formatDate(project.stats.dateRange.from)} &mdash; {formatDate(project.stats.dateRange.to)}</div>
             </div>
@@ -230,13 +230,13 @@ export default function ProjectClient() {
                 <div
                   key={session.id}
                   onClick={() => router.push(`/dashboard/sessions/${session.id}`)}
-                  className="rounded-xl border border-border/50 bg-card p-4 hover:border-border transition-colors cursor-pointer group"
+                  className="rounded-xl border border-border/50 bg-card p-3 sm:p-4 hover:border-border transition-colors cursor-pointer group"
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-3 sm:gap-4">
                     <span className={`size-2.5 rounded-full mt-1.5 shrink-0 ${sc.dot}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium truncate max-w-[500px] group-hover:text-emerald-400 transition-colors">
+                        <span className="font-medium truncate group-hover:text-emerald-400 transition-colors">
                           {session.title.length > 80 ? session.title.slice(0, 80) + "..." : session.title}
                         </span>
                       </div>
@@ -244,9 +244,9 @@ export default function ProjectClient() {
                         <Badge variant="outline" className={`text-[10px] border ${colors.badge}`}>
                           {session.agentId}
                         </Badge>
-                        <span className="text-[11px] font-mono text-muted-foreground">{session.model}</span>
+                        <span className="text-[11px] font-mono text-muted-foreground truncate max-w-[120px] sm:max-w-none">{session.model}</span>
                         <span className="text-[11px] text-muted-foreground">{session.messageCount} msgs</span>
-                        <span className="text-[11px] text-muted-foreground">{formatRelativeTime(session.lastActivityAt)}</span>
+                        <span className="text-[11px] text-muted-foreground hidden sm:inline">{formatRelativeTime(session.lastActivityAt)}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 shrink-0 text-sm">
@@ -318,22 +318,22 @@ function TimelineMessageBubble({
 
   if (msg.role === "user") {
     return (
-      <div className={`rounded-lg border-l-4 ${colors.border} border border-blue-500/20 bg-blue-500/10 p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
-        <div className="flex items-center gap-2 mb-2">
+      <div className={`rounded-lg border-l-4 ${colors.border} border border-blue-500/20 bg-blue-500/10 p-3 sm:p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           <Badge variant="outline" className={`text-[10px] border ${colors.badge}`}>{msg.agentId}</Badge>
           <span className="text-xs font-medium text-blue-400">User</span>
           <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
         </div>
-        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+        <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
       </div>
     );
   }
 
   if (msg.role === "assistant") {
     return (
-      <div className={`rounded-lg border-l-4 ${colors.border} border border-border/50 bg-zinc-800/50 p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
+      <div className={`rounded-lg border-l-4 ${colors.border} border border-border/50 bg-zinc-800/50 p-3 sm:p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 mb-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className={`text-[10px] border ${colors.badge}`}>{msg.agentId}</Badge>
             <span className="text-xs font-medium text-zinc-400">Assistant</span>
             {msg.model && <span className="text-[10px] font-mono text-muted-foreground">{msg.model}</span>}
@@ -345,16 +345,16 @@ function TimelineMessageBubble({
             </Badge>
           )}
         </div>
-        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+        <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
       </div>
     );
   }
 
   if (msg.role === "tool") {
     return (
-      <div className={`rounded-lg border-l-4 ${colors.border} border border-border/50 bg-zinc-900 p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
+      <div className={`rounded-lg border-l-4 ${colors.border} border border-border/50 bg-zinc-900 p-3 sm:p-4 ${isError ? "border-red-500/30 bg-red-500/10" : ""}`}>
+        <div className="flex items-center justify-between mb-2 gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className={`text-[10px] border ${colors.badge}`}>{msg.agentId}</Badge>
             <span className="text-xs text-amber-400">Tool</span>
             {msg.toolName && (
@@ -364,7 +364,7 @@ function TimelineMessageBubble({
             )}
             <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
           </div>
-          <button onClick={onToggle} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onToggle} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 min-h-[28px] px-2">
             {collapsed ? "Show" : "Hide"}
           </button>
         </div>
@@ -377,13 +377,13 @@ function TimelineMessageBubble({
 
   // system
   return (
-    <div className={`rounded-lg border-l-4 ${colors.border} px-4 py-2`}>
-      <div className="flex items-center gap-2">
+    <div className={`rounded-lg border-l-4 ${colors.border} px-3 sm:px-4 py-2`}>
+      <div className="flex items-center gap-2 flex-wrap">
         <Badge variant="outline" className={`text-[10px] border ${colors.badge}`}>{msg.agentId}</Badge>
         <span className="text-[11px] text-muted-foreground">System</span>
         <span className="text-[11px] text-muted-foreground">{formatRelativeTime(msg.timestamp)}</span>
       </div>
-      <p className="text-xs text-muted-foreground mt-1">{msg.content}</p>
+      <p className="text-xs text-muted-foreground mt-1 break-words">{msg.content}</p>
     </div>
   );
 }

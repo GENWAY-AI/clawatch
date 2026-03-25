@@ -8,6 +8,7 @@ import * as os from 'os';
 import { fork, spawn, ChildProcess } from 'child_process';
 import { loadConfig, saveConfig, configExists, paths, ensureDir, ClaWatchConfig, savePids, loadPids, clearPids, ManagedPids } from './config';
 import { execSync } from 'child_process';
+import { compareVersions, detectPackageManager, checkForUpdate } from './update';
 
 import * as net from 'net';
 
@@ -596,6 +597,98 @@ program
         fs.unwatchFile(paths.log);
         process.exit(0);
       });
+    }
+  });
+
+// --- Update command ---
+program
+  .command('update')
+  .description('Check for updates and upgrade clawatch to the latest version')
+  .option('--check', 'Only check for updates without installing')
+  .action(async (opts) => {
+    const currentVersion = pkg.version;
+    console.log(chalk.bold('\n🔄 ClaWatch Update\n'));
+    console.log(`  Current version: ${chalk.cyan(currentVersion)}`);
+
+    // 1. Fetch latest version from npm registry
+    console.log(chalk.gray('  Checking npm registry...'));
+    let latestVersion: string;
+    try {
+      latestVersion = execSync('npm view clawatch version 2>/dev/null', { encoding: 'utf-8' }).trim();
+    } catch {
+      console.log(chalk.red('\n  ❌ Could not reach npm registry.'));
+      console.log(chalk.yellow('     Check your internet connection and try again.\n'));
+      process.exit(1);
+    }
+
+    if (!latestVersion) {
+      console.log(chalk.red('\n  ❌ Could not determine latest version.\n'));
+      process.exit(1);
+    }
+
+    console.log(`  Latest version:  ${chalk.cyan(latestVersion)}`);
+
+    // 2. Check update status using extracted logic
+    const updateCheck = checkForUpdate({
+      currentVersion,
+      latestVersion,
+      checkOnly: !!opts.check,
+    });
+
+    if (updateCheck.action === 'up-to-date') {
+      console.log(chalk.green('\n  ✅ Already on the latest version!\n'));
+      process.exit(0);
+    }
+
+    console.log(chalk.yellow(`\n  ⬆️  Update available: ${currentVersion} → ${latestVersion}`));
+
+    if (updateCheck.action === 'check-only') {
+      console.log(chalk.gray('  Run "clawatch update" (without --check) to install.\n'));
+      process.exit(0);
+    }
+
+    // 3. Detect package manager using extracted logic
+    const pm = detectPackageManager({
+      execSync: (cmd) => execSync(cmd, { encoding: 'utf-8' }),
+      existsSync: (p) => fs.existsSync(p),
+    });
+
+    if (!pm) {
+      console.log(chalk.red('\n  ❌ Could not detect package manager (npm, yarn, or pnpm).'));
+      console.log(chalk.yellow('     Install one first: https://nodejs.org\n'));
+      process.exit(1);
+    }
+
+    // 5. Prompt user (unless stdin is not a TTY)
+    const readline = require('readline');
+    if (process.stdin.isTTY) {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(chalk.white(`\n  Update via ${pm.manager}? [Y/n] `), (a: string) => {
+          rl.close();
+          resolve(a.trim().toLowerCase());
+        });
+      });
+
+      if (answer && answer !== 'y' && answer !== 'yes') {
+        console.log(chalk.yellow('\n  Update cancelled.\n'));
+        process.exit(0);
+      }
+    }
+
+    // 6. Run update
+    console.log(chalk.blue(`\n  Running: ${pm.command}\n`));
+    try {
+      execSync(pm.command, { stdio: 'inherit' });
+      console.log(chalk.green.bold(`\n  ✅ Updated to ${latestVersion}!`));
+      console.log(chalk.gray('     Restart ClaWatch to use the new version.\n'));
+    } catch (err) {
+      console.log(chalk.red(`\n  ❌ Update failed. Try manually: ${pm.command}`));
+      if (pm.manager === 'npm') {
+        console.log(chalk.yellow('     You may need: sudo npm install -g clawatch@latest'));
+      }
+      console.log('');
+      process.exit(1);
     }
   });
 

@@ -239,3 +239,33 @@ export interface CostLimits {
   amount: number | null;
   agentLimits: Record<string, number>;
 }
+
+// Model Recommendations (#51)
+export type SessionComplexity = "simple" | "moderate" | "complex";
+
+export interface ModelRecommendation {
+  currentModel: string;
+  recommendedModel: string;
+  complexity: SessionComplexity;
+  confidence: number;
+  reasons: string[];
+  potentialSavings: {
+    costUsd: number;
+    percentage: number;
+  };
+}
+
+export interface SessionRecommendation {
+  sessionId: string;
+  recommendation: ModelRecommendation;
+}
+
+export interface BulkRecommendationSummary {
+  totalSessions: number;
+  potentialTotalSavings: number;
+  recommendations: Array<{
+    sessionId: string;
+    title: string;
+    recommendation: ModelRecommendation;
+  }>;
+}

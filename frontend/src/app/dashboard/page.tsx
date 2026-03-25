@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, Session, Project, Profile, AnalyticsData, SpendData, CostLimits } from "@/lib/types";
 import { getAgents, getAlerts, getAlertDetails, getCosts, pauseAgent, resumeAgent, acknowledgeAlert, acknowledgeAllAlerts, getSessions, getProjects, getProfiles, getVersion, getAnalytics, getSpend, setCostLimits, isUsingMockData } from "@/lib/api";
 import { ClaWatchLogo, ClaWatchIcon } from "@/components/clawatch-logo";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { StatsOverviewSkeleton, AgentsTabSkeleton, SessionsTabSkeleton, AnalyticsTabSkeleton } from "@/components/ui/dashboard-skeletons";
 import { AgentsTab } from "./components/AgentsTab";
 import { SessionsTab } from "./components/SessionsTab";
 import { AnalyticsTab } from "./components/AnalyticsTab";
@@ -477,10 +479,18 @@ function DashboardContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex items-center gap-3 text-muted-foreground">
-          <div className="size-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          Loading dashboard...
+      <div className="min-h-screen bg-background text-foreground">
+        <nav className="border-b border-border/50 bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <Link href="/" className="flex items-center gap-2"><ClaWatchIcon /><ClaWatchLogo size="md" /></Link>
+              <span className="text-sm text-muted-foreground">Dashboard</span>
+            </div>
+          </div>
+        </nav>
+        <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+          <StatsOverviewSkeleton />
+          <AgentsTabSkeleton />
         </div>
       </div>
     );
@@ -618,39 +628,47 @@ function DashboardContent() {
 
         {/* Tab Content */}
         {tab === "agents" && (
-          <AgentsTab
-            agents={agents} alerts={alerts} alertsTotal={alertsTotal} costs={costs} spendData={spendData}
-            showIdleAgents={showIdleAgents} setShowIdleAgents={setShowIdleAgents}
-            alertFilter={alertFilter} setAlertFilter={setAlertFilter} alertPage={alertPage} setAlertPage={setAlertPage}
-            onPauseResume={handlePauseResume} onAcknowledge={handleAcknowledge} onAcknowledgeAll={handleAcknowledgeAll} ackAllLoading={ackAllLoading}
-            onToggleAlertDetails={handleToggleAlertDetails} expandedAlerts={expandedAlerts} prefetchedDetails={prefetchedDetails}
-            showStackTrace={showStackTrace} setShowStackTrace={setShowStackTrace}
-          />
+          <ErrorBoundary>
+            <AgentsTab
+              agents={agents} alerts={alerts} alertsTotal={alertsTotal} costs={costs} spendData={spendData}
+              showIdleAgents={showIdleAgents} setShowIdleAgents={setShowIdleAgents}
+              alertFilter={alertFilter} setAlertFilter={setAlertFilter} alertPage={alertPage} setAlertPage={setAlertPage}
+              onPauseResume={handlePauseResume} onAcknowledge={handleAcknowledge} onAcknowledgeAll={handleAcknowledgeAll} ackAllLoading={ackAllLoading}
+              onToggleAlertDetails={handleToggleAlertDetails} expandedAlerts={expandedAlerts} prefetchedDetails={prefetchedDetails}
+              showStackTrace={showStackTrace} setShowStackTrace={setShowStackTrace}
+            />
+          </ErrorBoundary>
         )}
         {tab === "sessions" && (
-          <SessionsTab
-            sessions={sessions} sessionsTotal={sessionsTotal} projects={projects}
-            sessionFilter={sessionFilter} setSessionFilter={setSessionFilter}
-            sessionSort={sessionSort} setSessionSort={setSessionSort}
-            sessionPage={sessionPage} setSessionPage={setSessionPage}
-            setSessions={setSessions}
-          />
+          <ErrorBoundary>
+            <SessionsTab
+              sessions={sessions} sessionsTotal={sessionsTotal} projects={projects}
+              sessionFilter={sessionFilter} setSessionFilter={setSessionFilter}
+              sessionSort={sessionSort} setSessionSort={setSessionSort}
+              sessionPage={sessionPage} setSessionPage={setSessionPage}
+              setSessions={setSessions}
+            />
+          </ErrorBoundary>
         )}
         {tab === "analytics" && (
-          <AnalyticsTab
-            analyticsData={analyticsData} analyticsLoading={analyticsLoading} showingDemoData={showingDemoData} spendData={spendData}
-            timeWindow={timeWindow} setTimeWindowParam={setTimeWindowParam} customFrom={customFrom} customTo={customTo} setCustomDates={setCustomDates}
-            zoomRange={zoomRange} zoomLeft={zoomLeft} zoomRight={zoomRight} zoomFetching={zoomFetching} isDragging={isDragging}
-            handleZoomMouseDown={handleZoomMouseDown} handleZoomMouseMove={handleZoomMouseMove} handleZoomMouseUp={handleZoomMouseUp} resetZoom={resetZoom}
-            zoomedBuckets={zoomedBuckets} zoomedByProject={zoomedByProject} zoomedByAgent={zoomedByAgent}
-            effectiveGroupBy={effectiveGroupBy} activeLabel={activeLabel}
-            hiddenAgentSeries={hiddenAgentSeries} setHiddenAgentSeries={setHiddenAgentSeries}
-            hiddenProjectSeries={hiddenProjectSeries} setHiddenProjectSeries={setHiddenProjectSeries}
-            clearZoomState={clearZoomState}
-          />
+          <ErrorBoundary>
+            <AnalyticsTab
+              analyticsData={analyticsData} analyticsLoading={analyticsLoading} showingDemoData={showingDemoData} spendData={spendData}
+              timeWindow={timeWindow} setTimeWindowParam={setTimeWindowParam} customFrom={customFrom} customTo={customTo} setCustomDates={setCustomDates}
+              zoomRange={zoomRange} zoomLeft={zoomLeft} zoomRight={zoomRight} zoomFetching={zoomFetching} isDragging={isDragging}
+              handleZoomMouseDown={handleZoomMouseDown} handleZoomMouseMove={handleZoomMouseMove} handleZoomMouseUp={handleZoomMouseUp} resetZoom={resetZoom}
+              zoomedBuckets={zoomedBuckets} zoomedByProject={zoomedByProject} zoomedByAgent={zoomedByAgent}
+              effectiveGroupBy={effectiveGroupBy} activeLabel={activeLabel}
+              hiddenAgentSeries={hiddenAgentSeries} setHiddenAgentSeries={setHiddenAgentSeries}
+              hiddenProjectSeries={hiddenProjectSeries} setHiddenProjectSeries={setHiddenProjectSeries}
+              clearZoomState={clearZoomState}
+            />
+          </ErrorBoundary>
         )}
         {tab === "projects" && (
-          <ProjectsTab projects={projects} setProjects={setProjects} />
+          <ErrorBoundary>
+            <ProjectsTab projects={projects} setProjects={setProjects} />
+          </ErrorBoundary>
         )}
       </div>
     </div>

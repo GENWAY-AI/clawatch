@@ -8,6 +8,7 @@ import * as os from 'os';
 import { fork, spawn, ChildProcess } from 'child_process';
 import { loadConfig, saveConfig, configExists, paths, ensureDir, ClaWatchConfig, savePids, loadPids, clearPids, ManagedPids } from './config';
 import { execSync } from 'child_process';
+import { compareVersions, detectPackageManager, checkForUpdate } from './update';
 
 import * as net from 'net';
 
@@ -627,62 +628,30 @@ program
 
     console.log(`  Latest version:  ${chalk.cyan(latestVersion)}`);
 
-    // 2. Compare versions
-    if (currentVersion === latestVersion) {
+    // 2. Check update status using extracted logic
+    const updateCheck = checkForUpdate({
+      currentVersion,
+      latestVersion,
+      checkOnly: !!opts.check,
+    });
+
+    if (updateCheck.action === 'up-to-date') {
       console.log(chalk.green('\n  ✅ Already on the latest version!\n'));
       process.exit(0);
     }
 
     console.log(chalk.yellow(`\n  ⬆️  Update available: ${currentVersion} → ${latestVersion}`));
 
-    // 3. If --check, stop here
-    if (opts.check) {
+    if (updateCheck.action === 'check-only') {
       console.log(chalk.gray('  Run "clawatch update" (without --check) to install.\n'));
       process.exit(0);
     }
 
-    // 4. Detect package manager and install type
-    const detectPackageManager = (): { manager: string; command: string } | null => {
-      // Check if installed globally via npm
-      try {
-        const npmGlobalPrefix = execSync('npm prefix -g 2>/dev/null', { encoding: 'utf-8' }).trim();
-        const npmGlobalModules = path.join(npmGlobalPrefix, 'lib', 'node_modules', 'clawatch');
-        if (fs.existsSync(npmGlobalModules)) {
-          return { manager: 'npm', command: 'npm update -g clawatch' };
-        }
-        // Also check without /lib (Windows-style)
-        const npmGlobalModulesAlt = path.join(npmGlobalPrefix, 'node_modules', 'clawatch');
-        if (fs.existsSync(npmGlobalModulesAlt)) {
-          return { manager: 'npm', command: 'npm update -g clawatch' };
-        }
-      } catch { /* npm not available */ }
-
-      // Check yarn global
-      try {
-        const yarnGlobalDir = execSync('yarn global dir 2>/dev/null', { encoding: 'utf-8' }).trim();
-        if (yarnGlobalDir && fs.existsSync(path.join(yarnGlobalDir, 'node_modules', 'clawatch'))) {
-          return { manager: 'yarn', command: 'yarn global upgrade clawatch' };
-        }
-      } catch { /* yarn not available */ }
-
-      // Check pnpm global
-      try {
-        const pnpmGlobalDir = execSync('pnpm root -g 2>/dev/null', { encoding: 'utf-8' }).trim();
-        if (pnpmGlobalDir && fs.existsSync(path.join(pnpmGlobalDir, 'clawatch'))) {
-          return { manager: 'pnpm', command: 'pnpm update -g clawatch' };
-        }
-      } catch { /* pnpm not available */ }
-
-      // Fallback: try npm if it exists
-      try {
-        execSync('npm --version 2>/dev/null', { encoding: 'utf-8' });
-        return { manager: 'npm', command: 'npm install -g clawatch@latest' };
-      } catch { /* no npm */ }
-
-      return null;
-    };
-
-    const pm = detectPackageManager();
+    // 3. Detect package manager using extracted logic
+    const pm = detectPackageManager({
+      execSync: (cmd) => execSync(cmd, { encoding: 'utf-8' }),
+      existsSync: (p) => fs.existsSync(p),
+    });
 
     if (!pm) {
       console.log(chalk.red('\n  ❌ Could not detect package manager (npm, yarn, or pnpm).'));

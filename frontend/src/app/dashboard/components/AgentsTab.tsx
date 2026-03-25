@@ -4,17 +4,18 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, SpendData } from "@/lib/types";
 
 // --- Config ---
 const statusConfig: Record<AgentStatus, { color: string; dot: string; label: string; tooltip: string }> = {
-  running: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Running", tooltip: "Agent is actively processing tasks." },
-  active: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Active", tooltip: "Agent is online and responsive." },
-  idle: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Idle", tooltip: "Agent has no active sessions." },
-  paused: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400", label: "Paused", tooltip: "Agent was manually paused." },
-  stopped: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Stopped", tooltip: "Agent process is not running." },
-  error: { color: "bg-red-500/10 text-red-400 border-red-500/20", dot: "bg-red-400", label: "Error", tooltip: "Agent encountered an error." },
-  stuck: { color: "bg-orange-500/10 text-orange-400 border-orange-500/20", dot: "bg-orange-400 animate-pulse", label: "Stuck", tooltip: "Agent appears stuck." },
+  running: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Running", tooltip: "Active session with messages in the last 5 minutes. Updates automatically when new activity is detected." },
+  active: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400", label: "Active", tooltip: "Agent is online and responsive, ready to accept tasks." },
+  idle: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Idle", tooltip: "No active sessions for over 1 hour. Agent remains available but inactive." },
+  paused: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400", label: "Paused", tooltip: "Agent was manually paused and won't accept new tasks until resumed." },
+  stopped: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-400", label: "Stopped", tooltip: "Agent daemon process is not running on the host." },
+  error: { color: "bg-red-500/10 text-red-400 border-red-500/20", dot: "bg-red-400", label: "Error", tooltip: "Agent encountered an error. Check logs for details." },
+  stuck: { color: "bg-orange-500/10 text-orange-400 border-orange-500/20", dot: "bg-orange-400 animate-pulse", label: "Stuck", tooltip: "No activity detected for an extended period despite having an open session." },
 };
 
 const severityConfig: Record<AlertSeverity, { color: string; icon: string }> = {
@@ -171,7 +172,14 @@ export function AgentsTab({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className={`${sc.color} border text-xs`}>{sc.label}</Badge>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Badge variant="outline" className={`${sc.color} border text-xs cursor-help`}>{sc.label}</Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{sc.tooltip}</p>
+                    </TooltipContent>
+                  </Tooltip>
                   {agent.overLimit && agent.limit != null && (() => {
                     const spend = agent.limitType === "daily" ? (agent.todaySpend ?? 0) : (agent.mtdSpend ?? 0);
                     const over = spend - agent.limit;

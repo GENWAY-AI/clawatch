@@ -859,33 +859,71 @@ router.get("/analytics", async (req: Request, res: Response) => {
     const agentMap = new Map<string, Map<string, Bucket>>();
     const projectMap = new Map<string, { name: string; buckets: Map<string, Bucket> }>();
 
+    /**
+     * For hourly grouping, distribute a session's cost/tokens proportionally
+     * across all hours between startedAt and lastActivityAt.
+     * This fixes #58 — sessions no longer spike at their start time.
+     * For daily/weekly, we still bucket by startedAt (sessions rarely span days).
+     */
+    function getSessionBucketKeys(s: { startedAt: string; lastActivityAt: string }): string[] {
+      if (groupBy !== "hour") return [getBucketKey(s.startedAt)];
+
+      const start = new Date(s.startedAt);
+      const end = new Date(s.lastActivityAt);
+      // If start == end or invalid, just use startedAt
+      if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+        return [getBucketKey(s.startedAt)];
+      }
+
+      const keys: string[] = [];
+      const cursor = new Date(start);
+      // Truncate to the hour
+      cursor.setUTCMinutes(0, 0, 0);
+      const endKey = getBucketKey(s.lastActivityAt);
+      while (cursor.toISOString().slice(0, 13) + ":00" <= endKey) {
+        keys.push(cursor.toISOString().slice(0, 13) + ":00");
+        cursor.setUTCHours(cursor.getUTCHours() + 1);
+        // Safety: cap at 168 hours (1 week) to avoid runaway loops
+        if (keys.length > 168) break;
+      }
+      return keys.length > 0 ? keys : [getBucketKey(s.startedAt)];
+    }
+
     for (const s of sessions) {
-      const key = getBucketKey(s.startedAt);
+      const bucketKeys = getSessionBucketKeys(s);
+      const numBuckets = bucketKeys.length;
 
-      // Total
-      const tb = totalMap.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
-      tb.costUsd += s.costUsd;
-      tb.tokenCount += s.tokenCount;
-      tb.sessionCount += 1;
-      totalMap.set(key, tb);
+      // Distribute cost/tokens evenly across active hours
+      const costPerBucket = s.costUsd / numBuckets;
+      const tokensPerBucket = Math.round(s.tokenCount / numBuckets);
 
-      // By agent
-      if (!agentMap.has(s.agentId)) agentMap.set(s.agentId, new Map());
-      const ab = agentMap.get(s.agentId)!.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
-      ab.costUsd += s.costUsd;
-      ab.tokenCount += s.tokenCount;
-      ab.sessionCount += 1;
-      agentMap.get(s.agentId)!.set(key, ab);
+      for (const key of bucketKeys) {
+        // Total
+        const tb = totalMap.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+        tb.costUsd += costPerBucket;
+        tb.tokenCount += tokensPerBucket;
+        // Count session only in the first bucket (start hour)
+        if (key === bucketKeys[0]) tb.sessionCount += 1;
+        totalMap.set(key, tb);
 
-      // By project (session can belong to multiple projects)
-      const projects = projectTags.get(s.id) || [];
-      for (const p of projects) {
-        if (!projectMap.has(p.id)) projectMap.set(p.id, { name: p.name, buckets: new Map() });
-        const pb = projectMap.get(p.id)!.buckets.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
-        pb.costUsd += s.costUsd;
-        pb.tokenCount += s.tokenCount;
-        pb.sessionCount += 1;
-        projectMap.get(p.id)!.buckets.set(key, pb);
+        // By agent
+        if (!agentMap.has(s.agentId)) agentMap.set(s.agentId, new Map());
+        const ab = agentMap.get(s.agentId)!.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+        ab.costUsd += costPerBucket;
+        ab.tokenCount += tokensPerBucket;
+        if (key === bucketKeys[0]) ab.sessionCount += 1;
+        agentMap.get(s.agentId)!.set(key, ab);
+
+        // By project (session can belong to multiple projects)
+        const projects = projectTags.get(s.id) || [];
+        for (const p of projects) {
+          if (!projectMap.has(p.id)) projectMap.set(p.id, { name: p.name, buckets: new Map() });
+          const pb = projectMap.get(p.id)!.buckets.get(key) || { costUsd: 0, tokenCount: 0, sessionCount: 0 };
+          pb.costUsd += costPerBucket;
+          pb.tokenCount += tokensPerBucket;
+          if (key === bucketKeys[0]) pb.sessionCount += 1;
+          projectMap.get(p.id)!.buckets.set(key, pb);
+        }
       }
     }
 

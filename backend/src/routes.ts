@@ -1091,6 +1091,25 @@ router.get("/spend", async (req: Request, res: Response) => {
 // ---------- Model Recommendations ----------
 
 /**
+ * GET /api/recommendations/summary
+ * Get overview of potential savings across recent sessions.
+ * NOTE: must be defined BEFORE /:sessionId to avoid "summary" matching as a param.
+ */
+router.get("/recommendations/summary", async (req: Request, res: Response) => {
+  try {
+    const profile = req.query.profile as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    const sessions = await listSessions(profile);
+    const summary = recommendForRecentSessions(sessions, limit);
+
+    res.json(summary);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to generate summary" });
+  }
+});
+
+/**
  * GET /api/recommendations/:sessionId
  * Get AI-powered model recommendation for a specific session
  */
@@ -1112,24 +1131,6 @@ router.get("/recommendations/:sessionId", async (req: Request, res: Response) =>
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to generate recommendation" });
-  }
-});
-
-/**
- * GET /api/recommendations/summary
- * Get overview of potential savings across recent sessions
- */
-router.get("/recommendations/summary", async (req: Request, res: Response) => {
-  try {
-    const profile = req.query.profile as string | undefined;
-    const limit = parseInt(req.query.limit as string) || 20;
-
-    const sessions = await listSessions(profile);
-    const summary = recommendForRecentSessions(sessions, limit);
-
-    res.json(summary);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to generate summary" });
   }
 });
 

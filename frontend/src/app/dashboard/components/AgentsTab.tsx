@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Info } from "lucide-react";
 import { Agent, Alert, AlertDetails, CostData, AgentStatus, AlertSeverity, SpendData } from "@/lib/types";
 
 // --- Config ---
@@ -143,7 +145,7 @@ export function AgentsTab({
   const aggregatedAlerts = aggregateAlerts(alerts);
 
   return (
-    <>
+    <TooltipProvider>
       {/* Agent List */}
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -172,6 +174,30 @@ export function AgentsTab({
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className={`${sc.color} border text-xs`}>{sc.label}</Badge>
+                  {agent.status === "running" && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<span className="inline-flex items-center cursor-help" aria-label="About Running status" />}
+                      >
+                        <Info className="size-3.5 text-muted-foreground hover:text-foreground transition-colors" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <div className="space-y-1.5">
+                          <p className="font-medium">Running Status</p>
+                          <p className="text-xs text-muted-foreground">
+                            This agent has an active session with messages exchanged in the last few minutes.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-medium">How it differs:</span> &quot;Idle&quot; means no active sessions,
+                            &quot;Completed&quot; means the session finished, and &quot;Stopped&quot; means the agent process isn&apos;t running.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Status updates automatically based on heartbeat messages from the agent.
+                          </p>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                   {agent.overLimit && agent.limit != null && (() => {
                     const spend = agent.limitType === "daily" ? (agent.todaySpend ?? 0) : (agent.mtdSpend ?? 0);
                     const over = spend - agent.limit;
@@ -400,6 +426,6 @@ export function AgentsTab({
           </div>
         )}
       </div>
-    </>
+    </TooltipProvider>
   );
 }
